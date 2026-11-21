@@ -1,0 +1,51 @@
+[
+  {
+    "title": "Nanotechnology & Targeted Cancer Therapeutics",
+    "scenario": "You are meeting with your research advisor to discuss unexpected toxicity issues in your latest nanoparticle delivery trials for targeted cancer therapeutics.",
+    "turns": [
+      {
+        "label": "",
+        "question": "",
+        "options": [
+          "We should modify the polymer coating immediately, as this surface adjustment will help mitigate off-target accumulation.",
+          "I completely agree that we should stop using gold and switch entirely to plant-based remedies for cancer.",
+          "That sounds pretty bad, but maybe we can just ignore the liver cells and focus on the tumor instead.",
+          "The clinical application is already guaranteed to succeed without any further adjustments to our methodology."
+        ],
+        "answer": 0,
+        "explanation": "A resposta correta propõe uma solução acadêmica viável (modificar o revestimento de polímero) e utiliza naturalmente a palavra 'mitigate' exigida no exercício.",
+        "speaker": "Professor Miller",
+        "audio": "Our recent in vitro trials show that these gold nanoparticles accumulate in healthy liver tissue, which could severely limit their clinical application."
+      },
+      {
+        "label": "",
+        "question": "",
+        "options": [
+          "The cytotoxicity assays are completely irrelevant since the nanoparticles are already proven safe.",
+          "I will prepare the revised protocol today so we can generate reliable data prior to the departmental presentation.",
+          "Since we are modifying the surface, we should cancel the seminar and wait until next year.",
+          "No problem, I'll just guess the results of the assays and put them on the slides for Friday."
+        ],
+        "answer": 1,
+        "explanation": "Esta opção demonstra proatividade acadêmica alinhada à urgência do professor, respondendo diretamente ao próximo passo necessário.",
+        "speaker": "Professor Miller",
+        "audio": "That surface modification is a solid strategy. Consequently, we need to run a fresh batch of cytotoxicity assays before Friday's seminar."
+      },
+      {
+        "label": "",
+        "question": "",
+        "options": [
+          "I will maintain an exhaustive electronic lab notebook to ensure all synthesis parameters are accurately recorded for publication.",
+          "I usually just keep everything in my head, so writing it down won't be necessary at all.",
+          "We should probably write a completely different manuscript about physics instead of cancer therapeutics.",
+          "The final manuscript is already published online, so we don't need to change any parameters now."
+        ],
+        "answer": 0,
+        "explanation": "A opção correta valida a instrução do professor sobre rigor metodológico e documentação precisa para a publicação científica.",
+        "speaker": "Professor Miller",
+        "audio": "Excellent. Make sure you document every parameter change meticulously so we can include those metrics in the final manuscript draft."
+      }
+    ],
+    "model_summary": "In this conversation, the student and Professor Miller discussed unexpected liver toxicity issues arising from gold nanoparticle accumulation in targeted cancer therapy trials. Specifically, the professor advised modifying the polymer coating to mitigate off-target effects and requested fresh cytotoxicity assays before Friday's seminar. Ultimately, the student agreed to meticulously document all synthesis parameters in an electronic lab notebook to ensure accurate metrics for the upcoming manuscript."
+  }
+]

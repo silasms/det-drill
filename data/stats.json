@@ -1,0 +1,30 @@
+{
+  "streak": 2,
+  "last_date": "2026-11-21",
+  "drills_completed": 13,
+  "history": [],
+  "skills": {
+    "literacy": {
+      "attempts": 61,
+      "correct": 29
+    },
+    "comprehension": {
+      "attempts": 66,
+      "correct": 35
+    },
+    "conversation": {
+      "attempts": 1,
+      "correct": 0.0,
+      "scores": [
+        60
+      ]
+    },
+    "production": {
+      "attempts": 3,
+      "correct": 1,
+      "scores": [
+        55
+      ]
+    }
+  }
+}

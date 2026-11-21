@@ -1,0 +1,38 @@
+[
+  {
+    "word": "catalyst",
+    "real": true,
+    "def": "A substance that increases the rate of a chemical reaction, or a person/thing that precipitates an event.",
+    "ex": "The new manager acted as a catalyst for positive change within the company."
+  },
+  {
+    "word": "conspicuate",
+    "real": false,
+    "def": "Pseudo-palavra inventada baseada em 'conspicuous'.",
+    "ex": "Não existe em inglês."
+  },
+  {
+    "word": "ambiguous",
+    "real": true,
+    "def": "Open to more than one interpretation; having a double meaning.",
+    "ex": "His ambiguous response left us unsure of his true intentions."
+  },
+  {
+    "word": "substantiate",
+    "real": true,
+    "def": "Provide evidence to support or prove the truth of.",
+    "ex": "She was unable to substantiate her claims with hard data."
+  },
+  {
+    "word": "perplexosity",
+    "real": false,
+    "def": "Pseudo-palavra inventada combinando 'perplexity' e 'verbosity'.",
+    "ex": "Não existe em inglês."
+  },
+  {
+    "word": "derogative",
+    "real": false,
+    "def": "Pseudo-palavra inventada (a forma correta e mais comum é derogatory).",
+    "ex": "Não existe em inglês."
+  }
+]

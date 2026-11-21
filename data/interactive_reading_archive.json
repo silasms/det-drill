@@ -1,0 +1,94 @@
+[
+  {
+    "title": "Microplastics in Marine Food Chains",
+    "passage_pre": "The proliferation of microplastics in marine ecosystems has introduced synthetic polymers into the foundational strata of pelagic food webs. Filter-feeding organisms inadvertently ingest these persistent particles, mistaking them for natural organic nutrients. As a consequence, hydrophobic environmental toxins adsorbed onto the plastic surfaces bioaccumulate within primary consumers, setting the stage for trophic transfer across higher predatory levels.",
+    "question": "Qual frase melhor completa o texto de forma lógica e coesa?",
+    "options": [
+      "Conversely, marine ecosystems have demonstrated an unexpected resilience, rapidly breaking down synthetic polymers into harmless organic compounds.",
+      "These microscopic particles are generally measured in micrometers and float extensively throughout the world's deep oceanic trenches.",
+      "Furthermore, manufacturing industries are currently developing biodegradable polymers to entirely replace single-use packaging by the next decade.",
+      "Ultimately, this insidious mechanism threatens not only apex marine species but also global human populations dependent on seafood."
+    ],
+    "answer": 3,
+    "explanation": "A alternativa correta conclui o parágrafo mantendo a progressão lógica e coesa iniciada pelas frases anteriores, conectando o acúmulo trófico das toxinas às suas consequências de longo prazo para a cadeia alimentar e para a saúde humana. O distrator 1 apresenta uma contradição infundada sobre a resiliência dos oceanos; o distrator 2 desvia o foco para soluções industriais em vez de focar nos impactos ecológicos em andamento; e o distrator 3 fornece apenas uma definição superficial sobre o tamanho das partículas sem avançar o argumento lógico do texto."
+  },
+  {
+    "title": "Deep-Sea Hydrothermal Ecosystems",
+    "paragraph_1": "Deep-sea hydrothermal vents represent some of the most extreme environments on Earth, characterized by intense pressure, near-freezing ambient water, and toxic mineral plumes. [1], these harsh conditions support extraordinarily dense biological communities. Organisms such as giant tube worms and extremophile bacteria thrive by utilizing chemosynthesis rather than photosynthesis. [2], the absence of sunlight fails to limit biological productivity in these subterranean realms. Scientists must [3] potential deep-sea mining threats to preserve these fragile and unique habitats.",
+    "clozes": [
+      {
+        "label": "[1]",
+        "question": "",
+        "options": [
+          "Furthermore",
+          "Alternatively",
+          "Consequently",
+          "Similarly"
+        ],
+        "answer": 2,
+        "explanation": "O termo 'consequently' introduz uma consequência lógica ou contraste inesperado entre as condições extremas e a abundância de vida."
+      },
+      {
+        "label": "[2]",
+        "question": "",
+        "options": [
+          "Otherwise",
+          "Thus",
+          "However",
+          "Instead"
+        ],
+        "answer": 1,
+        "explanation": "Usa-se 'thus' para demonstrar que, como resultado do processo quimiossintético, a falta de luz solar não impede a produtividade biológica."
+      },
+      {
+        "label": "[3]",
+        "question": "",
+        "options": [
+          "mitigate",
+          "abandon",
+          "accelerate",
+          "fabricate"
+        ],
+        "answer": 0,
+        "explanation": "O verbo 'mitigate' (mitigar/atenuar) é o mais adequado no contexto de cientistas lidarem com ameaças de mineração em mar profundo."
+      }
+    ],
+    "bridge_question": {
+      "label": "",
+      "question": "",
+      "options": [
+        "Oceanographers have successfully mapped the ocean floor using advanced sonar technology.",
+        "Understanding the metabolic pathways of these vent organisms provides crucial insights into the limits of life on Earth and beyond.",
+        "Most marine biologists prefer studying shallow coral reefs due to easier accessibility.",
+        "Commercial fishing industries continue to deplete fish stocks across the globe."
+      ],
+      "answer": 1,
+      "explanation": "A frase de transição conecta perfeitamente a discussão sobre as adaptações biológicas nas fontes hidrotermais com a relevância científica dessas descobertas no segundo parágrafo."
+    },
+    "paragraph_2": "Furthermore, studying these chemosynthetic networks broadens our astrobiological horizons, suggesting that extraterrestrial life could similarly persist in dark, icy oceans elsewhere in the solar system. As anthropogenic pressures on deep-water environments escalate, robust conservation frameworks remain imperative to protect these windows into primordial planetary history.",
+    "idea_question": {
+      "label": "",
+      "question": "",
+      "options": [
+        "Hydrothermal vents are primarily responsible for regulating global ocean temperatures and weather patterns.",
+        "Mining operations in the deep sea have already destroyed all known hydrothermal vent communities.",
+        "Photosynthesis is the sole biological energy source utilized by organisms in both shallow and deep waters.",
+        "Deep-sea hydrothermal vents sustain unique chemosynthetic ecosystems that challenge traditional views of life and hold significant astrobiological and conservation value."
+      ],
+      "answer": 3,
+      "explanation": "Esta opção resume corretamente a tese principal do texto: a existência de ecossistemas quimiossintéticos extremos e sua importância para a biologia e conservação."
+    },
+    "title_question": {
+      "label": "",
+      "question": "",
+      "options": [
+        "Subterranean Oases: The Science and Significance of Hydrothermal Vents",
+        "An Overview of Deep-Sea Commercial Fishing and Mining",
+        "Freezing Temperatures and Solar Radiation in Marine Biology",
+        "The Role of Photosynthesis in Ocean Trenches"
+      ],
+      "answer": 0,
+      "explanation": "O título selecionado capta com precisão o tom acadêmico e o foco central do texto sobre os ecossistemas hidrotermais."
+    }
+  }
+]

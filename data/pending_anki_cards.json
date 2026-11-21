@@ -1,0 +1,12 @@
+[
+  {
+    "deck": "Read & Select",
+    "front": "<b>[DET: Real vs Fake Word]</b><br><br><h2 style='color:#3b82f6;'>disperious</h2><br>Essa palavra existe em ingl\u00eas?",
+    "back": "<h2 style='color:#ef4444;'>N\u00c3O (Pseudo-palavra)</h2><p><b>Significado/Regra:</b> [Palavra falsa criada para soar formal]</p><p><b>Exemplo:</b> <i>N\u00e3o existe em ingl\u00eas.</i></p>",
+    "tags": [
+      "DET",
+      "DET_ReadAndSelect"
+    ],
+    "created_at": "2026-11-21T16:42:28.788543"
+  }
+]

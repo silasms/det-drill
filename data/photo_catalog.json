@@ -1,0 +1,321 @@
+{
+  "01_mount_fuji_landscape.jpg": {
+    "title": "Mount Fuji at Sunset",
+    "scene_type": "Landscape / Nature",
+    "key_elements": [
+      "Snow-capped volcano peak towering in the distance",
+      "Warm golden hour sunset illuminating the horizon",
+      "Serene natural landscape in the foreground",
+      "Peaceful, majestic atmosphere"
+    ],
+    "useful_vocabulary": [
+      "snow-capped summit",
+      "bathed in the warm glow of sunset",
+      "towering majestically",
+      "tranquil scenery",
+      "evokes a sense of grandeur"
+    ],
+    "sample_c1": "Dominating the horizon, a snow-capped volcanic mountain stands majestically, its peak bathed in the amber hues of the setting sun. In the foreground, the tranquil landscape creates a stark yet harmonious contrast with the dramatic silhouette of the mountain."
+  },
+  "02_urban_city_night.png": {
+    "title": "Vibrant Urban Cityscape at Night",
+    "scene_type": "Urban / Architecture",
+    "key_elements": [
+      "Dense cluster of illuminated skyscrapers",
+      "Vibrant neon lights and glowing billboards",
+      "Streets filled with vehicle light trails",
+      "Bustling, high-tech nocturnal metropolis"
+    ],
+    "useful_vocabulary": [
+      "sprawling metropolis",
+      "neon-drenched skyscrapers",
+      "arteries of bustling traffic",
+      "futuristic ambiance",
+      "illuminating the nocturnal skyline"
+    ],
+    "sample_c1": "The image showcases a sprawling modern metropolis enveloped in nightfall, illuminated by a vivid tapestry of neon signs and skyscraper lights. Streaks of light along the thoroughfares indicate bustling traffic, conveying the relentless energy of contemporary urban life."
+  },
+  "03_fisherman_under_night_sky.jpg": {
+    "title": "Solitary Fisherman Under the Stars",
+    "scene_type": "Seascape / Human Activity",
+    "key_elements": [
+      "Solitary figure in a small wooden boat",
+      "Calm, reflective body of water",
+      "Expansive starry night sky with celestial glow",
+      "Atmosphere of quiet solitude and contemplation"
+    ],
+    "useful_vocabulary": [
+      "solitary silhouette",
+      "canopy of twinkling stars",
+      "mirror-like water surface",
+      "profound sense of serenity",
+      "engrossed in nighttime fishing"
+    ],
+    "sample_c1": "Under an expansive starry sky, a lone fisherman navigates a small wooden craft across the glassy, mirror-like waters. The gentle illumination from above casts subtle reflections, creating a profoundly serene and contemplative nocturnal tableau."
+  },
+  "04_cherry_blossoms_mountains.jpg": {
+    "title": "Cherry Blossoms Overlooking Mountain Valley",
+    "scene_type": "Nature / Seasonal Scenery",
+    "key_elements": [
+      "Delicate pink cherry blossom branches framing the view",
+      "Rolling green mountain ranges in the background",
+      "Soft daylight evoking springtime freshness",
+      "Harmonious blend of flora and mountainous terrain"
+    ],
+    "useful_vocabulary": [
+      "framed by blooming cherry blossoms",
+      "undulating mountain ridges",
+      "vibrant springtime palette",
+      "scenic vista",
+      "exudes renewal and tranquility"
+    ],
+    "sample_c1": "Delicate branches of blooming cherry blossoms frame the foreground, gracefully softening the view of rolling mountain ranges in the distance. The soft spring lighting and vibrant natural hues evoke an overwhelming sense of seasonal renewal and peace."
+  },
+  "05_misty_forest_trail.png": {
+    "title": "Misty Woodland Trail",
+    "scene_type": "Nature / Forest",
+    "key_elements": [
+      "Winding dirt path disappearing into the woods",
+      "Tall trees shrouded in morning fog",
+      "Soft diffused green and earthy tones",
+      "Atmosphere of mystery and tranquility"
+    ],
+    "useful_vocabulary": [
+      "shrouded in dense morning mist",
+      "canopy of towering trees",
+      "winding earthen footpath",
+      "ethereal, mysterious atmosphere",
+      "dappled light filtering through foliage"
+    ],
+    "sample_c1": "A winding dirt path disappears into the depths of a lush forest heavily blanketed in morning fog. Towering trees flank the trail on either side, their branches filtering subtle daylight and imparting an ethereal, mysterious ambiance to the scene."
+  },
+  "06_school_of_athens_gathering.jpg": {
+    "title": "Scholars in Classical Architecture",
+    "scene_type": "Art / Historical Architecture",
+    "key_elements": [
+      "Gathering of philosophers engaged in lively discussion",
+      "Monumental classical arches and vaulted ceilings",
+      "Gestures indicating intellectual debate and inquiry",
+      "Grand Renaissance architectural setting"
+    ],
+    "useful_vocabulary": [
+      "assembled beneath monumental arches",
+      "engaged in vigorous intellectual discourse",
+      "classical architecture with ornate sculptures",
+      "dynamic gestures and scholarly scrolls",
+      "epitome of academic collaboration"
+    ],
+    "sample_c1": "A congregation of scholarly figures in classical attire is depicted beneath monumental vaulted arches, actively engaged in animated philosophical debates. Various groups are scattered throughout the hall consulting texts and gesturing expressively, capturing a timeless scene of collective learning."
+  },
+  "07_northern_lights_aurora.png": {
+    "title": "Aurora Borealis Over Arctic Terrain",
+    "scene_type": "Nature / Celestial Phenomenon",
+    "key_elements": [
+      "Vibrant green and violet ribbons of light across the sky",
+      "Snow-covered hills and icy plains below",
+      "Dark polar night with clear celestial stars",
+      "Awe-inspiring natural spectacle"
+    ],
+    "useful_vocabulary": [
+      "ethereal curtains of emerald light",
+      "sweeping across the polar heavens",
+      "pristine snow-draped expanse",
+      "spectacular celestial phenomenon",
+      "stark, breathtaking wilderness"
+    ],
+    "sample_c1": "Luminous ribbons of emerald and violet aurora borealis sweep gracefully across the polar sky, casting an ethereal glow over the snow-covered landscape below. The sheer brilliance of this celestial display transforms the rugged arctic wilderness into a scene of otherworldly beauty."
+  },
+  "08_serene_lake_night.png": {
+    "title": "Moonlit Reflection on a Calm Lake",
+    "scene_type": "Nature / Night Landscape",
+    "key_elements": [
+      "Still lake surface acting as a mirror",
+      "Silhouetted shoreline trees in the midground",
+      "Soft moonbeam reflecting across the ripples",
+      "Tranquil and meditative mood"
+    ],
+    "useful_vocabulary": [
+      "unruffled, crystalline surface",
+      "silhouetted along the shoreline",
+      "luminescent reflections",
+      "tranquil nocturnal scenery",
+      "instills a meditative calmness"
+    ],
+    "sample_c1": "The tranquil surface of a secluded lake mirrors the faint glimmer of stars and ambient moonlight, with dense trees silhouetted along the far shore. A subtle ripple across the water creates undulating reflections, heightening the quiet, meditative atmosphere."
+  },
+  "09_samurai_artistic.jpg": {
+    "title": "Warrior in Traditional Armor",
+    "scene_type": "Historical / Cultural Portrait",
+    "key_elements": [
+      "Figure clad in intricate traditional warrior armor and helmet",
+      "Dramatic lighting highlighting details of craftsmanship",
+      "Disciplined, focused posture",
+      "Atmosphere of historical reverence and martial focus"
+    ],
+    "useful_vocabulary": [
+      "clad in ornate protective armor",
+      "stoic and commanding posture",
+      "dramatic side-lighting",
+      "rich historical and cultural heritage",
+      "poised with quiet determination"
+    ],
+    "sample_c1": "The photograph captures a warrior figure in elaborate traditional armor, standing poised with quiet discipline against a subtly illuminated backdrop. The meticulous craftsmanship of the helmet and chest plate is accentuated by dramatic lighting, evoking a deep reverence for martial heritage."
+  },
+  "10_medieval_manuscript_illumination.jpg": {
+    "title": "Illuminated Medieval Manuscript",
+    "scene_type": "Art / Historical Artifact",
+    "key_elements": [
+      "Parchment page with elaborate gold leaf and calligraphy",
+      "Intricate floral borders and miniature illustrations",
+      "Historical handwriting documenting ancient texts",
+      "Masterwork of craftsmanship and preservation"
+    ],
+    "useful_vocabulary": [
+      "ornately gilded illumination",
+      "meticulous medieval calligraphy",
+      "intricate foliate border designs",
+      "ancient parchment artifact",
+      "enduring cultural testament"
+    ],
+    "sample_c1": "This image features a lavishly illuminated medieval manuscript page, distinguished by its meticulous calligraphy and gilded borders intertwining floral motifs. The delicate artistry preserved on the aged parchment bears testament to the extraordinary craftsmanship of historical scribes."
+  },
+  "11_cave_paintings_wildlife.jpg": {
+    "title": "Prehistoric Cave Art",
+    "scene_type": "Archaeology / Ancient Art",
+    "key_elements": [
+      "Pigment drawings of animals on textured rock walls",
+      "Bison, horses, or deer rendered in earthy red and ochre",
+      "Rough cavern interior preserved over millennia",
+      "Humanity's earliest visual storytelling"
+    ],
+    "useful_vocabulary": [
+      "rendered in earthy ochre pigments",
+      "undulating cavern wall",
+      "depicting migrating herds",
+      "humanity's earliest artistic expressions",
+      "remarkable ancient preservation"
+    ],
+    "sample_c1": "Adorning the rugged contours of a cavern wall, ancient animal silhouettes are depicted using rich ochre and charcoal pigments. These prehistoric illustrations skillfully capture movement and anatomical grace, representing some of the earliest visual narratives in human history."
+  },
+  "12_coffee_scene.jpg": {
+    "title": "Warm Coffee and Books in a Cafe",
+    "scene_type": "Everyday Life / Lifestyle",
+    "key_elements": [
+      "Fresh cup of coffee in a ceramic mug with latte art",
+      "Rustic wooden tabletop with stacked books or notes",
+      "Warm ambient lighting creating an inviting mood",
+      "Cozy atmosphere of study and relaxation"
+    ],
+    "useful_vocabulary": [
+      "resting on a weathered wooden table",
+      "topped with delicate latte art",
+      "bathed in warm ambient light",
+      "inviting, contemplative environment",
+      "suggestive of a quiet morning study session"
+    ],
+    "sample_c1": "A steaming ceramic mug of coffee, adorned with delicate foam art, sits in the foreground on a rustic wooden table beside a stack of books. The warm, diffused lighting creates an inviting and cozy atmosphere, reminiscent of a relaxed morning spent reading."
+  },
+  "13_people_scene.jpg": {
+    "title": "Social Gathering Outdoors",
+    "scene_type": "People / Social Interaction",
+    "key_elements": [
+      "Group of individuals conversing and laughing together",
+      "Casual outdoor or social setting",
+      "Open body language and engaged expressions",
+      "Lively, collegial atmosphere"
+    ],
+    "useful_vocabulary": [
+      "engaged in animated conversation",
+      "exchanging smiles and gestures",
+      "casual open-air setting",
+      "cordial, camaraderie-filled atmosphere",
+      "sharing a lighthearted moment"
+    ],
+    "sample_c1": "A diverse group of people is shown gathered together in an outdoor environment, actively engaged in an animated and cheerful exchange. Their open body language and genuine smiles convey a palpable sense of warmth, camaraderie, and spontaneous connection."
+  },
+  "14_city_scene.jpg": {
+    "title": "Bustling Urban Street and Pedestrians",
+    "scene_type": "Urban / Street Life",
+    "key_elements": [
+      "Pedestrians walking along a broad urban sidewalk",
+      "Commercial buildings and store facades lining the street",
+      "Daytime natural illumination with long shadows",
+      "Rhythm of everyday metropolitan routine"
+    ],
+    "useful_vocabulary": [
+      "briskly navigating the sidewalk",
+      "lined with multi-story storefronts",
+      "vibrant pace of city life",
+      "pedestrian thoroughfare",
+      "capturing daily urban routine"
+    ],
+    "sample_c1": "Pedestrians are captured navigating a wide city sidewalk lined with bustling commercial shopfronts under bright daylight. The lively movement of people and the architectural backdrop effectively encapsulate the daily dynamism of contemporary metropolitan life."
+  },
+  "15_office_scene.jpg": {
+    "title": "Collaborative Modern Office Space",
+    "scene_type": "Workplace / Collaboration",
+    "key_elements": [
+      "Open-plan office with desks and modern technology",
+      "Professionals collaborating around laptop screens",
+      "Bright, ergonomic interior with clean aesthetics",
+      "Atmosphere of productivity and teamwork"
+    ],
+    "useful_vocabulary": [
+      "contemporary open-plan workspace",
+      "huddled around digital displays",
+      "fostering collaborative teamwork",
+      "ergonomic, naturally lit interior",
+      "focused yet dynamic work culture"
+    ],
+    "sample_c1": "In a well-lit, open-plan office space, professionals are gathered around workstations, actively collaborating on shared projects displayed on computer screens. The modern, minimalist interior underscores a professional environment centered on innovation, communication, and focused teamwork."
+  },
+  "16_reading_scene.jpg": {
+    "title": "Quiet Reading in a Cozy Space",
+    "scene_type": "Lifestyle / Solitude",
+    "key_elements": [
+      "Person absorbed in an open book",
+      "Comfortable armchair or cozy corner by a window",
+      "Soft natural sunlight illuminating the pages",
+      "Quiet mood of focus and intellectual leisure"
+    ],
+    "useful_vocabulary": [
+      "deeply engrossed in reading",
+      "bathed in gentle window light",
+      "cozy indoor sanctuary",
+      "quiet contemplation and study",
+      "radiating intellectual calm"
+    ],
+    "sample_c1": "An individual is portrayed comfortably seated in a cozy corner, deeply engrossed in the pages of an open book illuminated by soft daylight from an adjacent window. The peaceful setting and relaxed posture convey a timeless feeling of quiet contemplation and literary immersion."
+  },
+  "live_811c28f3_car_mechanic_worker_repairing_suspen.jpg": {
+    "title": "Car Mechanic Worker Repairing Suspension Of Lifted Automobile At ",
+    "scene_type": "Automotive Engineering Workshop",
+    "key_elements": [
+      "Subject activity and environment (Automotive Engineering Workshop)",
+      "Foreground subjects, posture, and interactions",
+      "Background context, lighting, and atmosphere"
+    ],
+    "useful_vocabulary": [
+      "in the foreground",
+      "in the background",
+      "engaged in",
+      "surrounded by",
+      "suggesting that"
+    ]
+  },
+  "live_unsplash_80f3f864a0.jpg": {
+    "title": "Documentary Scene #80F3F",
+    "scene_type": "Real Documentary Photograph",
+    "key_elements": [
+      "Main visual subject and setting",
+      "Lighting, composition, and depth",
+      "Implied context or action"
+    ],
+    "useful_vocabulary": [
+      "in the foreground",
+      "in the background",
+      "bathed in",
+      "conveying a sense of"
+    ]
+  }
+}

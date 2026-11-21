@@ -1,0 +1,67 @@
+[
+  {
+    "word": "Notwithstanding",
+    "type": "Connector / Contrast",
+    "question": "Which sentence uses the academic connector 'notwithstanding' correctly to show contrast?",
+    "options": [
+      "Notwithstanding the inclement weather, the archaeological expedition continued its excavation.",
+      "The researchers published their findings notwithstanding they wanted to wait for more data.",
+      "The experiment failed notwithstanding the meticulous planning of the team.",
+      "Notwithstanding of the high costs, the university upgraded its laboratory equipment."
+    ],
+    "answer": 0,
+    "explanation": "'Notwithstanding' significa 'apesar de' ou 'não obstante' e é frequentemente usado no início de uma frase ou antes de um sintagma nominal (como 'the inclement weather') sem precisar da preposição 'of'. A opção 0 está sintática e semanticamente correta. A opção 2 também seria aceitável gramaticalmente, mas a opção 0 é o uso acadêmico mais clássico e formal. A opção 2 tem um erro estrutural (falta 'the fact that' antes de 'they wanted') e a opção 4 usa incorretamente 'notwithstanding of'."
+  },
+  {
+    "word": "Consequently",
+    "type": "Connector / Cause & Effect",
+    "question": "Choose the most appropriate transition to complete the sentence: 'The central bank tightened monetary policy; ________, inflation rates began to stabilize over the next two quarters.'",
+    "options": [
+      "furthermore",
+      "consequently",
+      "conversely",
+      "meanwhile"
+    ],
+    "answer": 1,
+    "explanation": "'Consequently' (consequentemente) indica uma relação de causa e efeito, o que se encaixa perfeitamente aqui, pois o aperto na política monetária causou a estabilização da inflação. 'Furthermore' indica adição, 'conversely' indica contraste e 'meanwhile' indica simultaneidade temporal, nenhum dos quais reflete a relação de causa lógica exigida pelo contexto."
+  },
+  {
+    "word": "Mitigate",
+    "type": "Academic Verb",
+    "question": "Fill in the blank with the most suitable academic verb: 'Urban planners are testing new green spaces designed to ________ the urban heat island effect in densely populated cities.'",
+    "options": [
+      "exacerbate",
+      "mitigate",
+      "instigate",
+      "facilitate"
+    ],
+    "answer": 1,
+    "explanation": "'Mitigate' significa amenizar, mitigar ou reduzir a severidade de algo negativo (como o efeito de ilha de calor urbana). 'Exacerbate' pioraria a situação, 'instigate' significa incitar ou instigar, e 'facilitate' (facilitar) não combina semanticamente com a mitigação de um problema ambiental."
+  },
+  {
+    "word": "Conversely",
+    "type": "Connector / Contrast",
+    "question": "Select the correct option to fill in the blank: 'In 2020, remote work adoption skyrocketed. ________, traditional commercial real estate demand plummeted.'",
+    "options": [
+      "Therefore",
+      "Moreover",
+      "Conversely",
+      "Accordingly"
+    ],
+    "answer": 2,
+    "explanation": "'Conversely' (por outro lado / inversamente) é usado para introduzir um ponto de vista ou fato que contrasta diretamente com o anterior. Enquanto o trabalho remoto subiu, a demanda por imóveis comerciais caiu drasticamente, mostrando uma oposição direta. 'Therefore' e 'accordingly' indicam consequência, e 'moreover' indica adição."
+  },
+  {
+    "word": "Plausible",
+    "type": "Academic Adjective",
+    "question": "Which sentence demonstrates the correct academic use of the adjective 'plausible'?",
+    "options": [
+      "The scientist provided a plausible hypothesis that was later strongly supported by empirical data.",
+      "The heavy rain was completely plausible for the sudden cancellation of the outdoor concert.",
+      "She felt very plausible after winning the prestigious academic scholarship.",
+      "The ancient artifact was deemed plausible due to its genuine material and craftsmanship."
+    ],
+    "answer": 0,
+    "explanation": "'Plausible' significa razoável, crível ou verossímil, sendo frequentemente usado para descrever hipóteses, teorias ou explicações científicas que fazem sentido lógico. Na opção 0, 'plausible hypothesis' é um collocation acadêmico perfeito. Nas outras opções, o uso é incorreto: a chuva forte é 'expected' ou 'reason for', a pessoa se sente 'proud' ou 'accomplished', e o artefato é considerado 'authentic' ou 'genuine'."
+  }
+]
