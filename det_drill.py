@@ -2706,7 +2706,8 @@ def run_vocab_drill(force_ai=True):
 
     for idx, q in enumerate(questions, 1):
         mark_item_seen("vocab_drill", q)
-        print(f"\n{BOLD}Questão {idx}/{len(questions)}:{RESET} [{CYAN}{q['word']}{RESET}] - {DIM}{q['type']}{RESET}")
+        q_type = q.get("type", "Vocab & Transition")
+        print(f"\n{BOLD}Questão {idx}/{len(questions)}:{RESET} [{CYAN}{q_type}{RESET}]")
         print(f"{q['question']}")
         for opt_idx, opt in enumerate(q['options']):
             print(f"  {BOLD}{opt_idx+1}){RESET} {opt}")
@@ -2722,11 +2723,13 @@ def run_vocab_drill(force_ai=True):
                 break
             print("Digite apenas 1, 2, 3 ou 4.")
 
+        target_word = q.get("word", "")
+        word_tag = f" [{CYAN}{target_word}{RESET}]" if target_word else ""
         if user_idx == q["answer"]:
-            print(f"{GREEN}✓ Correto!{RESET} {q['explanation']}")
+            print(f"{GREEN}✓ Correto!{RESET}{word_tag} - {q['explanation']}")
             correct += 1
         else:
-            print(f"{RED}✗ Incorreto.{RESET} A resposta certa era: {q['options'][q['answer']]}")
+            print(f"{RED}✗ Incorreto.{RESET} A resposta certa era: {BOLD}{q['options'][q['answer']]}{RESET}{word_tag}")
             print(f"{DIM}Explicação: {q['explanation']}{RESET}")
             record_weak_word(q["word"])
 
