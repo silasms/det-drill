@@ -3620,6 +3620,396 @@ def run_interactive_listening(force_ai=True):
     input(f"\n{DIM}Pressione [ENTER] para voltar ao menu...{RESET}")
 
 # ==============================================================================
+# 11. WRITING COACH & SENTENCE BUILDER (SCAFFOLDED B1/PT -> C1 DESTRAVAR ESCRITA)
+# ==============================================================================
+def _run_scaffolded_essay_coach():
+    header()
+    print(f"\n{BOLD}{GREEN}[WRITING COACH: CONSTRUTOR DE REDAÇÃO 4 FRASES (PASSO A PASSO SEM PRESSÃO)]{RESET}")
+    print(f"{DIM}Destrave a escrita quebrando o texto de 5 minutos em 4 blocos lógicos guiados.{RESET}")
+    print(f"{DIM}💡 Dica: Se faltar uma palavra em inglês no meio da frase, escreva em PORTUGUÊS mesmo!{RESET}\n")
+
+    prompt = get_unseen_writing_prompt()
+    if not prompt and get_gemini_key():
+        print(f"{CYAN}🤖 Gerando tema acadêmico inédito...{RESET}")
+        prompt = generate_dynamic_writing_prompt_ai(4)
+    if not prompt:
+        prompt = get_random_writing_prompt_pool()
+    mark_item_seen("writing", prompt)
+
+    mission = get_c1_lexical_mission(3)
+
+    print(f"{BOLD}TEMA DA REDAÇÃO:{RESET}")
+    print(f"{YELLOW}{prompt}{RESET}\n")
+    print_c1_mission_banner(mission)
+
+    # Optional AI Idea Hints if user feels blank on arguments
+    if get_gemini_key():
+        try:
+            want_hint = input(f"{CYAN}💡 Quer ver 2 ideias rápidas de argumentos (a favor/contra) antes de começar? [s/N]: {RESET}").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            return
+        if want_hint in ["s", "sim", "y", "yes"]:
+            print(f"{CYAN}🤖 Gerando gatilhos de ideias para destravar seu argumento...{RESET}")
+            hint_req = (
+                f"Prompt: {prompt}\n\n"
+                "Forneça em português um resumo ultra-curto (máximo 4 linhas) com:\n"
+                "- Argumento Principal + Exemplo prático que o aluno pode usar\n"
+                "- Contra-argumento / Cuidado necessário + 3 collocations em inglês (com tradução) específicas para este tema."
+            )
+            hint_resp = call_gemini(hint_req, max_tokens=280)
+            if hint_resp:
+                print(f"\n{MAGENTA}┌── GATILHOS DE ARGUMENTAÇÃO ──────────────────────────────────────────┐{RESET}")
+                print(hint_resp.strip())
+                print(f"{MAGENTA}└──────────────────────────────────────────────────────────────────────┘{RESET}\n")
+
+    steps = [
+        (
+            "FRASE 1/4 — TESE + CONCESSÃO (Apresente os dois lados e sua posição)",
+            "Although [benefício ou risco do tema], I contend that [sua opinião principal] because [motivo central].",
+            "Ex: Although nanotechnology has unknown risks, I contend that its medical benefits outweigh the dangers because it saves lives."
+        ),
+        (
+            "FRASE 2/4 — MECANISMO / CAUSA E EFEITO (Explique o 'porquê' do seu argumento)",
+            "Primarily, this is because [como isso funciona na prática], which significantly [verbo: reduces / enhances / mitigates] [resultado].",
+            "Ex: Primarily, this is because targeted nanoparticles attack only tumors, which significantly reduces damage to healthy cells."
+        ),
+        (
+            "FRASE 3/4 — EXEMPLO CONCRETO OU CONTRASTE (Ancore com um caso real)",
+            "For instance, in the field of [área/setor], [exemplo concreto ou consequência prática].",
+            "Ex: For instance, in the field of oncology, patients recover much faster than with traditional chemotherapy."
+        ),
+        (
+            "FRASE 4/4 — CONCLUSÃO CONDICIONAL / RECOMENDAÇÃO (Feche com chave de ouro)",
+            "Ultimately, provided that governments enforce strict regulations to mitigate potential risks, [conclusão final].",
+            "Ex: Ultimately, provided that governments enforce strict safety regulations, this technology will revolutionize modern medicine."
+        )
+    ]
+
+    user_sentences = []
+    for idx, (step_title, template_str, example_str) in enumerate(steps, 1):
+        print(f"{BOLD}{CYAN}── {step_title} ──{RESET}")
+        print(f"  📐 {BOLD}Esqueleto sugerido:{RESET} {GREEN}{template_str}{RESET}")
+        print(f"  💬 {DIM}{example_str}{RESET}")
+        print(f"  {DIM}(Pode usar o esqueleto acima e escrever em português qualquer palavra que não souber){RESET}")
+        while True:
+            try:
+                ans = input(f"\n  ✍️  {BOLD}Sua Frase {idx}:{RESET} ").strip()
+            except (KeyboardInterrupt, EOFError):
+                return
+            if ans:
+                user_sentences.append(ans)
+                print()
+                break
+            print(f"  {YELLOW}Digite pelo menos um rascunho da frase {idx} (mesmo em português/inglês simples).{RESET}")
+
+    full_draft = " ".join(user_sentences)
+    word_count = len(full_draft.split())
+
+    print("=" * 70)
+    print(f"{BOLD}📝 SEU TEXTO COMPLETO MONTADO ({word_count} palavras):{RESET}")
+    print(f"{YELLOW}\"{full_draft}\"{RESET}")
+    print("=" * 70)
+    evaluate_c1_mission_and_cliches(full_draft, mission)
+
+    if get_gemini_key():
+        print(f"\n{CYAN}🤖 Analisando suas 4 frases e construindo a ponte do seu rascunho para B2 e C1...{RESET}")
+        sys_inst = (
+            "Você é um Coach de Escrita Acadêmica do Duolingo English Test (DET). "
+            "O aluno construiu uma redação em 4 frases usando andaimes (podendo conter palavras em português ou inglês B1). "
+            "Responda de forma prática e didática seguindo EXATAMENTE estas seções:\n"
+            "1. 🔄 PONTE FRASE POR FRASE (Para cada uma das 4 frases do aluno, mostre:\n"
+            "   - Sua frase original\n"
+            "   - Versão Corrigida Natural (B2 - mantendo exatamente a ideia do aluno e traduzindo qualquer trecho em português)\n"
+            "   - Versão Acadêmica Elevada (C1 - padrão 115+ DET))\n"
+            "2. 🏆 TEXTO UNIFICADO B2/C1 PRONTO PARA A PROVA (As 4 frases unidas em um parágrafo fluido de 100-130 palavras).\n"
+            "3. 🎯 FRASE-CHAVE PARA FIXAÇÃO MOTORA: Escolha a frase mais importante corrigida e coloque-a sozinha após o marcador "
+            "EXATO 'REWRITE_TARGET: ' em uma única linha.\n"
+            "4. Ao final absoluto, inclua a tag: [DET_EVAL: LITERACY=<nota_de_10_a_160>, PRODUCTION=<nota_de_10_a_160>]"
+        )
+        numbered_draft = "\n".join([f"Sentence {i+1}: {s}" for i, s in enumerate(user_sentences)])
+        ai_prompt = f"Prompt: {prompt}\n\nStudent's 4 Scaffolded Sentences:\n{numbered_draft}"
+        ai_resp = call_gemini(ai_prompt, sys_inst)
+        if ai_resp:
+            print(f"\n{BOLD}{GREEN}══════════════════════════════════════════════════════════════════════{RESET}")
+            print(f"{BOLD}{GREEN}🎓 COACHING FRASE POR FRASE (SEU RASCUNHO ➔ B2 ➔ C1):{RESET}")
+            print(f"{BOLD}{GREEN}══════════════════════════════════════════════════════════════════════{RESET}\n")
+            print(ai_resp)
+
+            lit_score, prod_score = extract_writing_scores(ai_resp)
+            record_skill_score("literacy", lit_score)
+            record_skill_score("production", prod_score)
+
+            rewrite_target = ""
+            for line in ai_resp.splitlines():
+                if "REWRITE_TARGET:" in line:
+                    rewrite_target = line.split("REWRITE_TARGET:", 1)[1].strip().strip('"')
+                    break
+
+            front = (
+                f"<b>[DET Writing Coach: 4-Sentence Builder]</b><br><br>"
+                f"<b>Prompt:</b> {prompt}<br><br>"
+                f"<b>Seu Rascunho ({word_count} palavras):</b><br><pre>{full_draft}</pre>"
+            )
+            back = f"<h3>Upgrade Frase a Frase ({lit_score}/160):</h3><div style='text-align:left;'>{ai_resp.replace(chr(10), '<br>')}</div>"
+            push_to_anki(
+                subdeck_name="Writing Upgrades",
+                front_html=front,
+                back_html=back,
+                tags=["DET", "DET_WritingCoach"],
+                audio_text=rewrite_target or None
+            )
+            print(f"\n{YELLOW}📥 Card com o upgrade frase por frase enviado ao Anki em segundo plano!{RESET}")
+
+            # Active Motor Memory Consolidation
+            print(f"\n{MAGENTA}┌── ✍️  PASSO FINAL: MEMÓRIA MOTORA (CONSOLIDAÇÃO ATIVA) ───────────────┐{RESET}")
+            if rewrite_target:
+                print(f"  Para fixar a estrutura no cérebro, redigite em inglês a versão refinada abaixo:")
+                print(f"  🎯 {GREEN}{BOLD}{rewrite_target}{RESET}")
+            else:
+                print(f"  Reescreva 1 das suas frases acima aplicando a correção B2/C1 que você aprendeu:")
+            print(f"{MAGENTA}└──────────────────────────────────────────────────────────────────────┘{RESET}")
+            try:
+                typed = input(f"\n  ⌨️  {BOLD}Digite a frase refinada (ou [ENTER] para pular):{RESET} ").strip()
+                if typed:
+                    print(f"  {GREEN}{BOLD}✓ Excelente! Você acabou de treinar a memória muscular da estrutura C1!{RESET}")
+            except (KeyboardInterrupt, EOFError):
+                pass
+
+    update_streak()
+    input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+
+
+def _run_scaffolded_photo_coach():
+    header()
+    print(f"\n{BOLD}{GREEN}[WRITING COACH: FÓRMULA DE 3 FRASES PARA FOTOS (SEM CRONÔMETRO)]{RESET}")
+    print(f"{DIM}Aprenda a descrever qualquer foto em 3 camadas fixas: Visão Geral ➔ Planos ➔ Atmosfera/Hipótese.{RESET}\n")
+
+    os.makedirs(PHOTOS_DIR, exist_ok=True)
+    unseen_live = get_unseen_live_photos()
+    chosen_file = random.choice(unseen_live) if unseen_live else fetch_dynamic_real_photo()
+
+    valid_exts = (".jpg", ".jpeg", ".png", ".webp")
+    photo_files = [f for f in os.listdir(PHOTOS_DIR) if f.lower().endswith(valid_exts)]
+    if not photo_files:
+        print(f"{RED}Nenhuma foto encontrada em {PHOTOS_DIR}.{RESET}")
+        input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+        return
+
+    if not chosen_file:
+        unseen_any = [f for f in photo_files if not is_item_seen("photo", f)]
+        chosen_file = random.choice(unseen_any) if unseen_any else random.choice(photo_files)
+    mark_item_seen("photo", chosen_file)
+
+    photo_path = os.path.join(PHOTOS_DIR, chosen_file)
+    photo_title = chosen_file.rsplit(".", 1)[0].replace("_", " ").title()
+    mission = get_c1_lexical_mission(3)
+
+    print_c1_mission_banner(mission)
+    input(f"{GREEN}Pressione [ENTER] para abrir a foto (sem limite de tempo) e construir as 3 frases...{RESET}")
+
+    viewer_candidates = [
+        os.path.join(SCRIPT_DIR, "det_photo_viewer.py"),
+        os.path.join(SCRIPT_DIR, "det-photo-viewer"),
+        os.path.expanduser("~/.local/bin/det-photo-viewer")
+    ]
+    viewer_tool = next((p for p in viewer_candidates if os.path.exists(p)), None)
+    viewer_proc = None
+    if viewer_tool:
+        try:
+            viewer_proc = subprocess.Popen(
+                [sys.executable, viewer_tool, photo_path, "300", f"COACH: {photo_title}"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception:
+            pass
+
+    photo_steps = [
+        (
+            "FRASE 1/3 — AÇÃO PRINCIPAL & CENÁRIO (O que a foto mostra no geral?)",
+            "This photograph captures a [adjetivo] scene of [quem/o quê] [ação com -ing] in [lugar/ambiente].",
+            "Ex: This photograph captures a candid scene of an artisan working diligently in a dimly lit workshop."
+        ),
+        (
+            "FRASE 2/3 — PRIMEIRO PLANO vs. PLANO DE FUNDO (Contraste espacial)",
+            "In the foreground, [detalhe da frente], whereas the background reveals [detalhe do fundo].",
+            "Ex: In the foreground, wooden tools are scattered across a table, whereas the background reveals shelves full of pottery."
+        ),
+        (
+            "FRASE 3/3 — ILUMINAÇÃO, ATMOSFERA & INFERÊNCIA (O que a cena transmite?)",
+            "The natural lighting and composition convey a sense of [foco/calma/urgência], suggesting that [hipótese].",
+            "Ex: The warm lighting conveys a sense of deep concentration, suggesting that the craftsman is finishing a delicate piece."
+        )
+    ]
+
+    user_sentences = []
+    try:
+        print()
+        for idx, (stitle, stemplate, sexample) in enumerate(photo_steps, 1):
+            print(f"{BOLD}{CYAN}── {stitle} ──{RESET}")
+            print(f"  📐 {BOLD}Fórmula:{RESET} {GREEN}{stemplate}{RESET}")
+            print(f"  💬 {DIM}{sexample}{RESET}")
+            while True:
+                ans = input(f"\n  ✍️  {BOLD}Sua Frase {idx} (pode misturar português se travar):{RESET} ").strip()
+                if ans:
+                    user_sentences.append(ans)
+                    print()
+                    break
+    except (KeyboardInterrupt, EOFError):
+        return
+    finally:
+        if viewer_proc:
+            try:
+                viewer_proc.terminate()
+            except Exception:
+                pass
+
+    full_desc = " ".join(user_sentences)
+    words = len(full_desc.split())
+    print("=" * 70)
+    print(f"{BOLD}📸 SUA DESCRIÇÃO COMPLETA ({words} palavras):{RESET}")
+    print(f"{YELLOW}\"{full_desc}\"{RESET}")
+    print("=" * 70)
+    evaluate_c1_mission_and_cliches(full_desc, mission)
+
+    if get_gemini_key():
+        print(f"\n{CYAN}🤖 Avaliando a foto real + suas 3 frases no Gemini Multimodal...{RESET}")
+        prompt = (
+            f"Você é um Coach Sênior do Duolingo English Test avaliando o treino guiado de 'Write About the Photo'.\n"
+            f"O aluno escreveu 3 frases estruturadas (Visão Geral, Foreground/Background, Atmosfera/Inferência), podendo ter usado palavras em português:\n"
+            f"Frase 1: {user_sentences[0]}\n"
+            f"Frase 2: {user_sentences[1]}\n"
+            f"Frase 3: {user_sentences[2]}\n\n"
+            f"Olhando para a imagem real anexada, forneça:\n"
+            f"1. 🔄 CORREÇÃO & UPGRADE DAS 3 FRASES (Mostre cada frase do aluno transformada em B2 natural e depois em C1 avançado fiel à foto real).\n"
+            f"2. ✨ PARÁGRAFO MODELO UNIFICADO (35-50 palavras unindo as 3 camadas com perfeição visual).\n"
+            f"3. 🎯 Coloque a melhor frase C1 sozinha após o marcador EXATO 'REWRITE_TARGET: '.\n"
+            f"4. Inclua ao final: [DET_EVAL: LITERACY=<nota_de_10_a_160>, PRODUCTION=<nota_de_10_a_160>]"
+        )
+        resp = analyze_image_with_gemini(photo_path, prompt)
+        if resp:
+            print(f"\n{GREEN}{BOLD}══════════════════════════════════════════════════════════════════════{RESET}")
+            print(resp)
+            print(f"{GREEN}{BOLD}══════════════════════════════════════════════════════════════════════{RESET}\n")
+
+            lit_score, prod_score = extract_writing_scores(resp)
+            record_skill_score("literacy", lit_score)
+            record_skill_score("production", prod_score)
+
+            rewrite_target = ""
+            for line in resp.splitlines():
+                if "REWRITE_TARGET:" in line:
+                    rewrite_target = line.split("REWRITE_TARGET:", 1)[1].strip().strip('"')
+                    break
+
+            push_to_anki(
+                subdeck_name="Writing Upgrades",
+                front_html=f"<b>[DET Photo Coach: 3-Sentence Formula]</b><br><br><b>Foto:</b> {photo_title}<br><br><b>Seu Rascunho:</b> {full_desc}",
+                back_html=f"<h3>Coaching Multimodal ({lit_score}/160):</h3><div style='text-align:left;'>{resp.replace(chr(10), '<br>')}</div>",
+                tags=["DET", "DET_PhotoCoach"],
+                audio_text=rewrite_target or full_desc
+            )
+
+            if rewrite_target:
+                print(f"{MAGENTA}✍️  FIXAÇÃO ATIVA:{RESET} Redigite a frase C1 abaixo para gravar na memória motora:")
+                print(f"🎯 {GREEN}{BOLD}{rewrite_target}{RESET}")
+                try:
+                    typed = input(f"\n⌨️  {BOLD}Sua redigitação:{RESET} ").strip()
+                    if typed:
+                        print(f"{GREEN}✓ Perfeito! Estrutura visual fixada!{RESET}")
+                except (KeyboardInterrupt, EOFError):
+                    pass
+
+    update_streak()
+    input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+
+
+def _run_pt_to_c1_bridge_coach():
+    header()
+    print(f"\n{BOLD}{GREEN}[WRITING COACH: TRADUTOR DE IDEIAS (PORTUGUÊS / B1 ➔ INGLÊS B2 & C1)]{RESET}")
+    print(f"{DIM}Travou para expressar um pensamento? Escreva sua ideia em português (ou inglês básico){RESET}")
+    print(f"{DIM}e veja como construir essa exata ideia em inglês natural (B2) e acadêmico (C1), com treino ativo.{RESET}\n")
+
+    if not get_gemini_key():
+        print(f"{YELLOW}⚠️ Configure sua chave do Gemini na opção S) Configurações para usar o Tradutor de Ideias IA.{RESET}")
+        input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+        return
+
+    while True:
+        try:
+            raw_idea = input(f"{CYAN}💭 Digite sua ideia ou parágrafo (em Português, Inglês simples ou misturado) [ou ENTER para sair]:\n> {RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+        if not raw_idea:
+            break
+
+        print(f"\n{CYAN}🤖 Transformando sua ideia em estruturas B2 e C1 do DET...{RESET}")
+        req = (
+            f"Ideia original do aluno: \"{raw_idea}\"\n\n"
+            "Como Coach Oficial do Duolingo English Test, transforme essa exata ideia nas seguintes etapas claras:\n"
+            "1. 🟢 NÍVEL B2 (Inglês claro, correto e natural — fácil de lembrar sob pressão):\n"
+            "2. 🚀 NÍVEL C1 ACADÊMICO (Padrão 115-130+ no DET, com conectivos e collocations fortes):\n"
+            "3. 🧩 BLOCOS DE CONSTRUÇÃO (Explique os 3 principais chunks/estruturas usados na versão B2/C1 e por que funcionam):\n"
+            "4. Coloque a versão B2/C1 recomendada em uma única linha após o marcador EXATO 'REWRITE_TARGET: '."
+        )
+        resp = call_gemini(req, max_tokens=600)
+        if resp:
+            print(f"\n{GREEN}{BOLD}──────────────────────────────────────────────────────────────────────{RESET}")
+            print(resp)
+            print(f"{GREEN}{BOLD}──────────────────────────────────────────────────────────────────────{RESET}\n")
+
+            rewrite_target = ""
+            for line in resp.splitlines():
+                if "REWRITE_TARGET:" in line:
+                    rewrite_target = line.split("REWRITE_TARGET:", 1)[1].strip().strip('"')
+                    break
+
+            if rewrite_target:
+                push_to_anki(
+                    subdeck_name="Writing Upgrades",
+                    front_html=f"<b>[DET Idea Bridge: Como expressar em Inglês B2/C1?]</b><br><br>💭 <b>Ideia:</b> {raw_idea}",
+                    back_html=f"<div style='text-align:left;'>{resp.replace(chr(10), '<br>')}</div>",
+                    tags=["DET", "DET_IdeaBridge"],
+                    audio_text=rewrite_target
+                )
+                print(f"{YELLOW}📥 Expressão e áudio salvos automaticamente no seu Anki!{RESET}")
+                speak_text(rewrite_target)
+                try:
+                    practice = input(f"\n✍️  {BOLD}Treine digitar a frase em inglês para fixar:{RESET}\n   🎯 {GREEN}{rewrite_target}{RESET}\n   ⌨️  > ").strip()
+                    if practice:
+                        print(f"   {GREEN}✓ Ótimo! Mais um bloco pronto na sua memória ativa!{RESET}\n")
+                except (KeyboardInterrupt, EOFError):
+                    break
+
+
+def run_writing_coach():
+    while True:
+        header()
+        print(f"\n{BOLD}{GREEN}[MÓDULO W: WRITING COACH & DESTRAVAR ESCRITA (PASSO A PASSO)]{RESET}")
+        print(f"{DIM}Elimine o bloqueio da tela em branco treinando a escrita em blocos guiados sem pressão.{RESET}\n")
+        print(f"  {BOLD}1){RESET} 🏗️  {BOLD}Construtor de Redação em 4 Frases{RESET}   {DIM}(Tese ➔ Explicação ➔ Exemplo ➔ Conclusão){RESET}")
+        print(f"  {BOLD}2){RESET} 📸 {BOLD}Fórmula de 3 Frases para Fotos{RESET}       {DIM}(Visão Geral ➔ Primeiro/Segundo Plano ➔ Atmosfera){RESET}")
+        print(f"  {BOLD}3){RESET} 🌉 {BOLD}Ponte de Ideias (Português/B1 ➔ C1){RESET} {DIM}(Escreva o que quer dizer em PT e aprenda a estrutura C1){RESET}")
+        print(f"  {BOLD}4){RESET} ⏱️  Ir para o Simulador Oficial Cronometrado (5 min Interactive Writing)")
+        print(f"  {BOLD}0){RESET} Voltar ao Menu Principal")
+
+        try:
+            sub = input(f"\n{CYAN}Escolha o modo do Writing Coach (0-4): {RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if sub == "1":
+            _run_scaffolded_essay_coach()
+        elif sub == "2":
+            _run_scaffolded_photo_coach()
+        elif sub == "3":
+            _run_pt_to_c1_bridge_coach()
+        elif sub == "4":
+            run_writing_prompt()
+        elif sub == "0":
+            break
+
+# ==============================================================================
 # 9. DET SCORE DASHBOARD (4 SUBSCORES)
 # ==============================================================================
 def run_score_dashboard():
@@ -3809,6 +4199,7 @@ def main():
         print(f"  {BOLD}8){RESET} Speaking Simulator  {DIM}(Read/Listen Then Speak Cego + Missão C1 + Voz IA){RESET}")
         print(f"  {BOLD}9){RESET} Write About Photo   {DIM}(1 min - Visão Multimodal + Missão C1 + Fixação Ativa){RESET}")
         print(f"  {BOLD}L){RESET} {CYAN}{BOLD}Interactive Listen{RESET}  {DIM}(Diálogo Acadêmico + Summarize the Conversation 75s){RESET}")
+        print(f"  {BOLD}W){RESET} {GREEN}{BOLD}Writing Coach{RESET}       {DIM}(Destravar Escrita: 4 Frases Guiadas + Foto 3 Frases + PT➔C1){RESET}")
         print(f"  {BOLD}D){RESET} {MAGENTA}{BOLD}Dashboard DET{RESET}       {DIM}(Projeção das 4 Subnotas UFRJ + IA Adaptativa){RESET}")
         print(f"  {BOLD}S){RESET} Configurações       {DIM}(Anki + Google Gemini + Mic){RESET}")
         print(f"  {BOLD}0){RESET} Sair")
@@ -3840,6 +4231,8 @@ def main():
             run_photo_writing()
         elif choice.lower() in ["l", "10"]:
             run_interactive_listening()
+        elif choice.lower() == "w":
+            run_writing_coach()
         elif choice.lower() == "d":
             run_score_dashboard()
         elif choice.lower() == "s":
