@@ -680,6 +680,132 @@ def extract_writing_scores(feedback_text, default_lit=85, default_prod=80):
         return val, val
     return default_lit, default_prod
 
+def compute_local_writing_breakdown(text, mission=None, target_words=80):
+    """Computes an objective local DET writing breakdown and fallback score (10-160)."""
+    if not text or not text.strip():
+        return {
+            "word_count": 0, "target_words": target_words, "connectors": [],
+            "mission_hits": [], "cliches": [], "pt_markers": 0,
+            "local_lit": 55, "local_prod": 50
+        }
+    words = text.split()
+    word_count = len(words)
+    lower_t = text.lower()
+    connectors = list(dict.fromkeys([c for c in ACADEMIC_CONNECTORS if c in lower_t]))
+    mission_hits = [w for w, _ in (mission or []) if w.lower() in lower_t]
+    cliches = []
+    for pattern, label, _ in CLICHE_UPGRADES:
+        if re.search(pattern, lower_t):
+            cliches.append(label)
+
+    # Detect rough Portuguese markers (accents or common PT stopwords when user mixes PT/EN)
+    pt_accents = len(re.findall(r'[áàâãéêíóôõúç]', lower_t))
+    pt_words = len(re.findall(r'\b(que|não|para|com|uma|porque|mas|como|mais|muito|também|isso|pelo|pela)\b', lower_t))
+    pt_markers = pt_accents + pt_words
+
+    # Base score calculation (10-160 DET scale, 95-105 = B2 Meta UFRJ)
+    len_ratio = min(1.25, word_count / max(15, target_words))
+    base = 65 + int(len_ratio * 25)
+    conn_bonus = min(15, len(connectors) * 5)
+    c1_bonus = min(15, len(mission_hits) * 6)
+    cliche_pen = min(12, len(cliches) * 4)
+    pt_pen = min(20, pt_markers * 4)
+
+    local_lit = max(40, min(145, base + conn_bonus + c1_bonus - cliche_pen - pt_pen))
+    local_prod = max(35, min(145, base + conn_bonus + int(c1_bonus * 1.2) - cliche_pen - int(pt_pen * 1.2)))
+    return {
+        "word_count": word_count,
+        "target_words": target_words,
+        "connectors": connectors,
+        "mission_hits": mission_hits,
+        "cliches": cliches,
+        "pt_markers": pt_markers,
+        "local_lit": (local_lit // 5) * 5,
+        "local_prod": (local_prod // 5) * 5
+    }
+
+def _cefr_badge_for_score(score):
+    if score >= 130:
+        return f"{GREEN}{BOLD}C1+ (Excelência Acadêmica){RESET}"
+    elif score >= 115:
+        return f"{GREEN}{BOLD}C1 (Avançado){RESET}"
+    elif score >= 95:
+        return f"{GREEN}{BOLD}B2 (Meta UFRJ Atingida ✓){RESET}"
+    elif score >= 80:
+        return f"{YELLOW}{BOLD}B1+ (Quase na Meta UFRJ){RESET}"
+    elif score >= 65:
+        return f"{YELLOW}B1 (Intermediário){RESET}"
+    else:
+        return f"{RED}A2 (Em Construção){RESET}"
+
+def print_writing_coach_scorecard(lit_score, prod_score, breakdown, mode_label="WRITING COACH"):
+    """Displays a visual DET scorecard (10-160) with progress bars, UFRJ goal status, and session history."""
+    overall = int(round((lit_score + prod_score) / 2.0 / 5.0) * 5)
+    overall = max(10, min(160, overall))
+
+    # Record inside STATS["coach_scores"]
+    load_stats()
+    coach_hist = STATS.setdefault("coach_scores", [])
+    delta_str = ""
+    if coach_hist:
+        last_overall = coach_hist[-1].get("overall", overall)
+        diff = overall - last_overall
+        if diff > 0:
+            delta_str = f" {GREEN}(▲ +{diff} pts vs. anterior){RESET}"
+        elif diff < 0:
+            delta_str = f" {YELLOW}(▼ {diff} pts vs. anterior){RESET}"
+        else:
+            delta_str = f" {DIM}(= manteve a nota anterior){RESET}"
+
+    coach_hist.append({
+        "date": date.today().isoformat(),
+        "mode": mode_label,
+        "overall": overall,
+        "literacy": lit_score,
+        "production": prod_score
+    })
+    if len(coach_hist) > 30:
+        STATS["coach_scores"] = coach_hist[-30:]
+    save_stats()
+
+    def _bar(sc):
+        pct = min(100, max(0, int((sc / 160.0) * 100)))
+        filled = int(pct / 100.0 * 24)
+        c = GREEN if sc >= 95 else (YELLOW if sc >= 80 else RED)
+        return f"[{c}{'█' * filled}{'░' * (24 - filled)}{RESET}]"
+
+    wc = breakdown.get("word_count", 0)
+    tw = breakdown.get("target_words", 80)
+    conns = breakdown.get("connectors", [])
+    hits = breakdown.get("mission_hits", [])
+    pt_m = breakdown.get("pt_markers", 0)
+
+    print(f"\n{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════════╗{RESET}")
+    print(f"{BOLD}{CYAN}║{RESET} 📊 {BOLD}PONTUAÇÃO DO SEU RASCUNHO — {mode_label:<36}{RESET} {BOLD}{CYAN}║{RESET}")
+    print(f"{BOLD}{CYAN}╠══════════════════════════════════════════════════════════════════════╣{RESET}")
+    print(f"{BOLD}{CYAN}║{RESET} 🏆 {BOLD}NOTA GERAL DO TREINO:{RESET} {BOLD}{overall}/160 pts{RESET}  [{_cefr_badge_for_score(overall)}]{delta_str}")
+    print(f"{BOLD}{CYAN}║{RESET}    {_bar(overall)} (Meta UFRJ: 95-105 pts)")
+    print(f"{BOLD}{CYAN}╟──────────────────────────────────────────────────────────────────────╢{RESET}")
+    print(f"{BOLD}{CYAN}║{RESET} • {BOLD}Literacy   (Estrutura & Gramática):{RESET} {_bar(lit_score)} {BOLD}{lit_score}/160{RESET}")
+    print(f"{BOLD}{CYAN}║{RESET} • {BOLD}Production (Léxico & Complexidade):{RESET} {_bar(prod_score)} {BOLD}{prod_score}/160{RESET}")
+    print(f"{BOLD}{CYAN}╟──────────────────────────────────────────────────────────────────────╢{RESET}")
+    print(f"{BOLD}{CYAN}║{RESET} 🔍 {BOLD}RAIO-X DE DESEMPENHO:{RESET}")
+    len_color = GREEN if wc >= tw else YELLOW
+    print(f"{BOLD}{CYAN}║{RESET}   • Extensão: {len_color}{BOLD}{wc} palavras{RESET} (referência ideal: ~{tw}+ palavras)")
+    conn_str = f"{GREEN}{', '.join(conns[:4])}{RESET}" if conns else f"{YELLOW}Nenhum detectado (use: although, furthermore, consequently){RESET}"
+    print(f"{BOLD}{CYAN}║{RESET}   • Conectivos Acadêmicos ({len(conns)}): {conn_str}")
+    if hits:
+        print(f"{BOLD}{CYAN}║{RESET}   • Missão C1 Ativada: {GREEN}{BOLD}+{len(hits)} termo(s) ({', '.join(hits)}){RESET}")
+    if pt_m > 0:
+        print(f"{BOLD}{CYAN}║{RESET}   • Trechos em Português no rascunho: {YELLOW}Detectados (ótimo para destravar! Veja a versão C1){RESET}")
+    else:
+        print(f"{BOLD}{CYAN}║{RESET}   • Idioma do Rascunho: {GREEN}100% em Inglês ✓{RESET}")
+
+    recent_scores = [str(x.get("overall", 0)) for x in STATS.get("coach_scores", [])[-5:]]
+    if len(recent_scores) > 1:
+        print(f"{BOLD}{CYAN}║{RESET} 📈 {BOLD}Evolução no Writing Coach (últimos treinos):{RESET} {CYAN}{' ➔ '.join(recent_scores)} pts{RESET}")
+    print(f"{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════════╝{RESET}")
+
 # ==============================================================================
 # STATS & 4 SUBSCORES TRACKER
 # ==============================================================================
@@ -3710,13 +3836,17 @@ def _run_scaffolded_essay_coach():
     print(f"{YELLOW}\"{full_draft}\"{RESET}")
     print("=" * 70)
     evaluate_c1_mission_and_cliches(full_draft, mission)
+    breakdown = compute_local_writing_breakdown(full_draft, mission, target_words=80)
+    scored_by_ai = False
 
     if get_gemini_key():
-        print(f"\n{CYAN}🤖 Analisando suas 4 frases e construindo a ponte do seu rascunho para B2 e C1...{RESET}")
+        print(f"\n{CYAN}🤖 Analisando suas 4 frases, calculando sua pontuação DET e construindo a ponte B2/C1...{RESET}")
         sys_inst = (
             "Você é um Coach de Escrita Acadêmica do Duolingo English Test (DET). "
             "O aluno construiu uma redação em 4 frases usando andaimes (podendo conter palavras em português ou inglês B1). "
             "Responda de forma prática e didática seguindo EXATAMENTE estas seções:\n"
+            "0. 📊 DIAGNÓSTICO DE PONTUAÇÃO DO SEU RASCUNHO (Avalie o rascunho original do aluno na escala DET 10-160, "
+            "dando nota para Estrutura/Argumentação, Gramática e Vocabulário, e dizendo quantos pontos ele ganha ao aplicar a versão C1).\n"
             "1. 🔄 PONTE FRASE POR FRASE (Para cada uma das 4 frases do aluno, mostre:\n"
             "   - Sua frase original\n"
             "   - Versão Corrigida Natural (B2 - mantendo exatamente a ideia do aluno e traduzindo qualquer trecho em português)\n"
@@ -3735,9 +3865,15 @@ def _run_scaffolded_essay_coach():
             print(f"{BOLD}{GREEN}══════════════════════════════════════════════════════════════════════{RESET}\n")
             print(ai_resp)
 
-            lit_score, prod_score = extract_writing_scores(ai_resp)
+            lit_score, prod_score = extract_writing_scores(
+                ai_resp,
+                default_lit=breakdown["local_lit"],
+                default_prod=breakdown["local_prod"]
+            )
             record_skill_score("literacy", lit_score)
             record_skill_score("production", prod_score)
+            print_writing_coach_scorecard(lit_score, prod_score, breakdown, mode_label="REDAÇÃO 4 FRASES")
+            scored_by_ai = True
 
             rewrite_target = ""
             for line in ai_resp.splitlines():
@@ -3774,6 +3910,12 @@ def _run_scaffolded_essay_coach():
                     print(f"  {GREEN}{BOLD}✓ Excelente! Você acabou de treinar a memória muscular da estrutura C1!{RESET}")
             except (KeyboardInterrupt, EOFError):
                 pass
+
+    if not scored_by_ai:
+        lit_score, prod_score = breakdown["local_lit"], breakdown["local_prod"]
+        record_skill_score("literacy", lit_score)
+        record_skill_score("production", prod_score)
+        print_writing_coach_scorecard(lit_score, prod_score, breakdown, mode_label="REDAÇÃO 4 FRASES (LOCAL)")
 
     update_streak()
     input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
@@ -3871,9 +4013,11 @@ def _run_scaffolded_photo_coach():
     print(f"{YELLOW}\"{full_desc}\"{RESET}")
     print("=" * 70)
     evaluate_c1_mission_and_cliches(full_desc, mission)
+    breakdown = compute_local_writing_breakdown(full_desc, mission, target_words=45)
+    scored_by_ai = False
 
     if get_gemini_key():
-        print(f"\n{CYAN}🤖 Avaliando a foto real + suas 3 frases no Gemini Multimodal...{RESET}")
+        print(f"\n{CYAN}🤖 Avaliando a foto real + suas 3 frases e calculando sua nota no Gemini Multimodal...{RESET}")
         prompt = (
             f"Você é um Coach Sênior do Duolingo English Test avaliando o treino guiado de 'Write About the Photo'.\n"
             f"O aluno escreveu 3 frases estruturadas (Visão Geral, Foreground/Background, Atmosfera/Inferência), podendo ter usado palavras em português:\n"
@@ -3881,6 +4025,7 @@ def _run_scaffolded_photo_coach():
             f"Frase 2: {user_sentences[1]}\n"
             f"Frase 3: {user_sentences[2]}\n\n"
             f"Olhando para a imagem real anexada, forneça:\n"
+            f"0. 📊 DIAGNÓSTICO DE PONTUAÇÃO (Avalie o rascunho na escala DET 10-160 em Precisão Visual, Gramática e Vocabulário).\n"
             f"1. 🔄 CORREÇÃO & UPGRADE DAS 3 FRASES (Mostre cada frase do aluno transformada em B2 natural e depois em C1 avançado fiel à foto real).\n"
             f"2. ✨ PARÁGRAFO MODELO UNIFICADO (35-50 palavras unindo as 3 camadas com perfeição visual).\n"
             f"3. 🎯 Coloque a melhor frase C1 sozinha após o marcador EXATO 'REWRITE_TARGET: '.\n"
@@ -3892,9 +4037,15 @@ def _run_scaffolded_photo_coach():
             print(resp)
             print(f"{GREEN}{BOLD}══════════════════════════════════════════════════════════════════════{RESET}\n")
 
-            lit_score, prod_score = extract_writing_scores(resp)
+            lit_score, prod_score = extract_writing_scores(
+                resp,
+                default_lit=breakdown["local_lit"],
+                default_prod=breakdown["local_prod"]
+            )
             record_skill_score("literacy", lit_score)
             record_skill_score("production", prod_score)
+            print_writing_coach_scorecard(lit_score, prod_score, breakdown, mode_label="FOTO 3 FRASES")
+            scored_by_ai = True
 
             rewrite_target = ""
             for line in resp.splitlines():
@@ -3911,7 +4062,7 @@ def _run_scaffolded_photo_coach():
             )
 
             if rewrite_target:
-                print(f"{MAGENTA}✍️  FIXAÇÃO ATIVA:{RESET} Redigite a frase C1 abaixo para gravar na memória motora:")
+                print(f"\n{MAGENTA}✍️  FIXAÇÃO ATIVA:{RESET} Redigite a frase C1 abaixo para gravar na memória motora:")
                 print(f"🎯 {GREEN}{BOLD}{rewrite_target}{RESET}")
                 try:
                     typed = input(f"\n⌨️  {BOLD}Sua redigitação:{RESET} ").strip()
@@ -3919,6 +4070,12 @@ def _run_scaffolded_photo_coach():
                         print(f"{GREEN}✓ Perfeito! Estrutura visual fixada!{RESET}")
                 except (KeyboardInterrupt, EOFError):
                     pass
+
+    if not scored_by_ai:
+        lit_score, prod_score = breakdown["local_lit"], breakdown["local_prod"]
+        record_skill_score("literacy", lit_score)
+        record_skill_score("production", prod_score)
+        print_writing_coach_scorecard(lit_score, prod_score, breakdown, mode_label="FOTO 3 FRASES (LOCAL)")
 
     update_streak()
     input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
@@ -3947,16 +4104,28 @@ def _run_pt_to_c1_bridge_coach():
         req = (
             f"Ideia original do aluno: \"{raw_idea}\"\n\n"
             "Como Coach Oficial do Duolingo English Test, transforme essa exata ideia nas seguintes etapas claras:\n"
+            "0. 📊 NÍVEL ATUAL DO SEU RASCUNHO (Avalie a frase original enviada na escala DET 10-160 / CEFR, "
+            "ou indique o ganho de pontuação ao passar do Português/B1 para B2: ~100 pts e C1: ~130+ pts):\n"
             "1. 🟢 NÍVEL B2 (Inglês claro, correto e natural — fácil de lembrar sob pressão):\n"
             "2. 🚀 NÍVEL C1 ACADÊMICO (Padrão 115-130+ no DET, com conectivos e collocations fortes):\n"
             "3. 🧩 BLOCOS DE CONSTRUÇÃO (Explique os 3 principais chunks/estruturas usados na versão B2/C1 e por que funcionam):\n"
-            "4. Coloque a versão B2/C1 recomendada em uma única linha após o marcador EXATO 'REWRITE_TARGET: '."
+            "4. Coloque a versão B2/C1 recomendada em uma única linha após o marcador EXATO 'REWRITE_TARGET: '.\n"
+            "5. Ao final absoluto, inclua a tag avaliando a frase original do aluno (se foi 100% em português, dê 55/55; se já tentou em inglês, dê a nota real 10-160): "
+            "[DET_EVAL: LITERACY=<nota_de_10_a_160>, PRODUCTION=<nota_de_10_a_160>]"
         )
-        resp = call_gemini(req, max_tokens=600)
+        resp = call_gemini(req, max_tokens=650)
         if resp:
             print(f"\n{GREEN}{BOLD}──────────────────────────────────────────────────────────────────────{RESET}")
             print(resp)
             print(f"{GREEN}{BOLD}──────────────────────────────────────────────────────────────────────{RESET}\n")
+
+            breakdown = compute_local_writing_breakdown(raw_idea, mission=None, target_words=20)
+            lit_score, prod_score = extract_writing_scores(
+                resp,
+                default_lit=breakdown["local_lit"],
+                default_prod=breakdown["local_prod"]
+            )
+            print_writing_coach_scorecard(lit_score, prod_score, breakdown, mode_label="PONTE DE IDEIAS (PT/B1 ➔ C1)")
 
             rewrite_target = ""
             for line in resp.splitlines():
@@ -3977,7 +4146,11 @@ def _run_pt_to_c1_bridge_coach():
                 try:
                     practice = input(f"\n✍️  {BOLD}Treine digitar a frase em inglês para fixar:{RESET}\n   🎯 {GREEN}{rewrite_target}{RESET}\n   ⌨️  > ").strip()
                     if practice:
-                        print(f"   {GREEN}✓ Ótimo! Mais um bloco pronto na sua memória ativa!{RESET}\n")
+                        # Accuracy check on motor practice
+                        sim_words = set(re.findall(r'\w+', practice.lower()))
+                        tgt_words = set(re.findall(r'\w+', rewrite_target.lower()))
+                        overlap = int((len(sim_words & tgt_words) / max(1, len(tgt_words))) * 100)
+                        print(f"   {GREEN}✓ Ótimo! Precisão da fixação motora: {BOLD}{overlap}%{RESET}{GREEN} — estrutura C1 ativada!{RESET}\n")
                 except (KeyboardInterrupt, EOFError):
                     break
 
@@ -3985,11 +4158,33 @@ def _run_pt_to_c1_bridge_coach():
 def run_writing_coach():
     while True:
         header()
+        stats = load_stats()
+        coach_hist = stats.get("coach_scores", [])
+        skills = stats.get("skills", {})
+        lit_scores = skills.get("literacy", {}).get("scores", [])
+        prod_scores = skills.get("production", {}).get("scores", [])
+
         print(f"\n{BOLD}{GREEN}[MÓDULO W: WRITING COACH & DESTRAVAR ESCRITA (PASSO A PASSO)]{RESET}")
-        print(f"{DIM}Elimine o bloqueio da tela em branco treinando a escrita em blocos guiados sem pressão.{RESET}\n")
-        print(f"  {BOLD}1){RESET} 🏗️  {BOLD}Construtor de Redação em 4 Frases{RESET}   {DIM}(Tese ➔ Explicação ➔ Exemplo ➔ Conclusão){RESET}")
-        print(f"  {BOLD}2){RESET} 📸 {BOLD}Fórmula de 3 Frases para Fotos{RESET}       {DIM}(Visão Geral ➔ Primeiro/Segundo Plano ➔ Atmosfera){RESET}")
-        print(f"  {BOLD}3){RESET} 🌉 {BOLD}Ponte de Ideias (Português/B1 ➔ C1){RESET} {DIM}(Escreva o que quer dizer em PT e aprenda a estrutura C1){RESET}")
+        print(f"{DIM}Elimine o bloqueio da tela em branco treinando a escrita em blocos guiados sem pressão.{RESET}")
+
+        if coach_hist:
+            last_entry = coach_hist[-1]
+            avg_coach = int(sum(x.get("overall", 80) for x in coach_hist[-5:]) / len(coach_hist[-5:]))
+            recent_trail = " ➔ ".join(str(x.get("overall", 80)) for x in coach_hist[-5:])
+            c_col = GREEN if avg_coach >= 95 else (YELLOW if avg_coach >= 80 else RED)
+            print(f"{CYAN}📊 {BOLD}Seu Desempenho no Writing Coach:{RESET} Última Nota: {BOLD}{last_entry.get('overall')}/160{RESET} ({last_entry.get('mode')}) | Média Recente: {c_col}{BOLD}{avg_coach}/160 pts{RESET}")
+            print(f"{DIM}   Histórico recente: {recent_trail} pts (Meta UFRJ: 95-105 pts){RESET}\n")
+        elif lit_scores or prod_scores:
+            l_avg = int(sum(lit_scores[-3:]) / len(lit_scores[-3:])) if lit_scores else 85
+            p_avg = int(sum(prod_scores[-3:]) / len(prod_scores[-3:])) if prod_scores else 85
+            w_est = int((l_avg + p_avg) / 2)
+            print(f"{CYAN}📊 {BOLD}Nível Atual de Escrita (Dashboard):{RESET} ~{BOLD}{w_est}/160 pts{RESET} (Literacy: {l_avg} | Production: {p_avg}) — {DIM}Faça um treino abaixo para gerar seu Scorecard!{RESET}\n")
+        else:
+            print()
+
+        print(f"  {BOLD}1){RESET} 🏗️  {BOLD}Construtor de Redação em 4 Frases{RESET}   {DIM}(Tese ➔ Explicação ➔ Exemplo ➔ Conclusão + Nota DET){RESET}")
+        print(f"  {BOLD}2){RESET} 📸 {BOLD}Fórmula de 3 Frases para Fotos{RESET}       {DIM}(Visão Geral ➔ Primeiro/Segundo Plano ➔ Atmosfera + Nota DET){RESET}")
+        print(f"  {BOLD}3){RESET} 🌉 {BOLD}Ponte de Ideias (Português/B1 ➔ C1){RESET} {DIM}(Escreva o que quer dizer em PT e veja sua nota + estrutura C1){RESET}")
         print(f"  {BOLD}4){RESET} ⏱️  Ir para o Simulador Oficial Cronometrado (5 min Interactive Writing)")
         print(f"  {BOLD}0){RESET} Voltar ao Menu Principal")
 
