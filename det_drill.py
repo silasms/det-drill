@@ -599,8 +599,8 @@ def analyze_image_with_gemini(image_path, prompt_text):
     except Exception:
         return call_gemini(prompt_text)
 
-def analyze_audio_with_gemini(audio_path, prompt_text):
-    """Analyzes user's spoken audio directly via Gemini Multimodal API with fallback."""
+def analyze_audio_with_gemini(audio_path, prompt_text, image_path=None, custom_sys_inst=None):
+    """Analyzes user's spoken audio (and optional photo) directly via Gemini Multimodal API with fallback."""
     client = get_gemini_client()
     if not client or not os.path.exists(audio_path):
         return None
@@ -609,32 +609,41 @@ def analyze_audio_with_gemini(audio_path, prompt_text):
         with open(audio_path, "rb") as f:
             audio_bytes = f.read()
 
-        sys_inst = (
+        sys_inst = custom_sys_inst or (
             "Você é um Examinador Sênior Oficial do Duolingo English Test (DET). "
             "Avalie com rigor pedagógico e construtivo o áudio do candidato na questão de Speaking.\n\n"
             "Estruture sua resposta estritamente nas seguintes seções:\n"
             "1. 🎙️ TRANSCRIÇÃO EXATA:\n"
             "Transcreva palavra por palavra o que o candidato falou, indicando pausas longas e repetições.\n\n"
             "2. ⚡ FLUÊNCIA, ACÚSTICA & PRONÚNCIA:\n"
-            "Avalie o ritmo, pausas silenciosas, hesitações e clareza da pronúncia.\n\n"
+            "Avalie o ritmo (palavras por minuto estimadas), pausas silenciosas, hesitações e clareza da pronúncia (destaque palavras específicas pronunciadas incorretamente com dica fonética simples para brasileiros).\n\n"
             "3. 📝 GRAMÁTICA & VOCABULÁRIO:\n"
             "Destaque erros gramaticais e estruturas incompletas, apresentando as correções formais.\n\n"
             "4. 📊 NOTA ESTIMADA DET (Escala 10 a 160) & NÍVEL CEFR:\n"
-            "Dê uma estimativa realista dos subscores Conversation e Production (ex: 55-65/160, Nível A2).\n\n"
+            "Dê uma estimativa realista dos subscores Conversation e Production (ex: 85-95/160, Nível B2).\n\n"
             "5. ✨ MODELO REFINADO B2/C1 (Meta UFRJ 95-105+):\n"
-            "Apresente como o candidato deveria responder à mesma pergunta em 3 blocos estruturados e fluidos.\n\n"
+            "Apresente como o candidato deveria responder à mesma pergunta em 3 blocos estruturados e fluidos.\n"
+            "Coloque também a melhor frase-chave resumida sozinha em uma linha após o marcador EXATO 'SPEAK_MODEL: ' para treino de áudio/shadowing.\n\n"
             "IMPORTANTE: Ao final absoluto da sua mensagem, inclua obrigatoriamente a tag de pontuação no formato exato:\n"
             "[DET_EVAL: CONVERSATION=<nota_de_10_a_160>, PRODUCTION=<nota_de_10_a_160>]"
         )
+
+        contents_list = []
+        if image_path and os.path.exists(image_path):
+            with open(image_path, "rb") as img_f:
+                img_bytes = img_f.read()
+            ext = image_path.lower().rsplit(".", 1)[-1]
+            mime = "image/png" if ext == "png" else ("image/webp" if ext == "webp" else "image/jpeg")
+            contents_list.append(types.Part.from_bytes(data=img_bytes, mime_type=mime))
+
+        contents_list.append(types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav"))
+        contents_list.append(f"{sys_inst}\n\nTask Prompt: {prompt_text}")
 
         for model_name in ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"]:
             try:
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=[
-                        types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav"),
-                        f"{sys_inst}\n\nTask Prompt: {prompt_text}"
-                    ]
+                    contents=contents_list
                 )
                 if response and response.text:
                     return response.text
@@ -643,6 +652,89 @@ def analyze_audio_with_gemini(audio_path, prompt_text):
         return None
     except Exception as e:
         return f"[Erro ao analisar áudio com Gemini: {e}]"
+
+
+def analyze_multiple_audios_with_gemini(audio_paths, prompt_text, sys_inst):
+    """Analyzes multiple sequential audio blocks (e.g., 3-block scaffolded speaking) in a single Gemini Multimodal call."""
+    client = get_gemini_client()
+    if not client:
+        return None
+    try:
+        from google.genai import types
+        contents_list = []
+        for idx, ap in enumerate(audio_paths, 1):
+            if ap and os.path.exists(ap) and os.path.getsize(ap) > 2000:
+                with open(ap, "rb") as f:
+                    ab = f.read()
+                contents_list.append(f"--- AUDIO BLOCK {idx} ---")
+                contents_list.append(types.Part.from_bytes(data=ab, mime_type="audio/wav"))
+        if not contents_list:
+            return None
+        contents_list.append(f"{sys_inst}\n\nTask Prompt: {prompt_text}")
+
+        for model_name in ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"]:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents_list
+                )
+                if response and response.text:
+                    return response.text
+            except Exception:
+                continue
+        return None
+    except Exception as e:
+        return f"[Erro ao analisar blocos de áudio com Gemini: {e}]"
+
+
+def print_speaking_coach_scorecard(conv_score, prod_score, mode_label="SPEAKING COACH"):
+    """Displays a visual DET Speaking scorecard (10-160) with progress bars, UFRJ goal status, and session history."""
+    overall = int(round((conv_score + prod_score) / 2.0 / 5.0) * 5)
+    overall = max(10, min(160, overall))
+
+    load_stats()
+    speak_hist = STATS.setdefault("speaking_coach_scores", [])
+    delta_str = ""
+    if speak_hist:
+        last_overall = speak_hist[-1].get("overall", overall)
+        diff = overall - last_overall
+        if diff > 0:
+            delta_str = f" {GREEN}(▲ +{diff} pts vs. anterior){RESET}"
+        elif diff < 0:
+            delta_str = f" {YELLOW}(▼ {diff} pts vs. anterior){RESET}"
+        else:
+            delta_str = f" {DIM}(= manteve a nota anterior){RESET}"
+
+    speak_hist.append({
+        "date": date.today().isoformat(),
+        "mode": mode_label,
+        "overall": overall,
+        "conversation": conv_score,
+        "production": prod_score
+    })
+    if len(speak_hist) > 30:
+        STATS["speaking_coach_scores"] = speak_hist[-30:]
+    save_stats()
+
+    def _bar(sc):
+        pct = min(100, max(0, int((sc / 160.0) * 100)))
+        filled = int(pct / 100.0 * 24)
+        c = GREEN if sc >= 95 else (YELLOW if sc >= 80 else RED)
+        return f"[{c}{'█' * filled}{'░' * (24 - filled)}{RESET}]"
+
+    print(f"\n{BOLD}{MAGENTA}╔══════════════════════════════════════════════════════════════════════╗{RESET}")
+    print(f"{BOLD}{MAGENTA}║{RESET} 🎙️  {BOLD}PONTUAÇÃO DA SUA FALA — {mode_label:<39}{RESET} {BOLD}{MAGENTA}║{RESET}")
+    print(f"{BOLD}{MAGENTA}╠══════════════════════════════════════════════════════════════════════╣{RESET}")
+    print(f"{BOLD}{MAGENTA}║{RESET} 🏆 {BOLD}NOTA GERAL DE FALA:{RESET}   {BOLD}{overall}/160 pts{RESET}  [{_cefr_badge_for_score(overall)}]{delta_str}")
+    print(f"{BOLD}{MAGENTA}║{RESET}    {_bar(overall)} (Meta UFRJ: 95-105 pts)")
+    print(f"{BOLD}{MAGENTA}╟──────────────────────────────────────────────────────────────────────╢{RESET}")
+    print(f"{BOLD}{MAGENTA}║{RESET} • {BOLD}Conversation (Fluência & Pronúncia):{RESET} {_bar(conv_score)} {BOLD}{conv_score}/160{RESET}")
+    print(f"{BOLD}{MAGENTA}║{RESET} • {BOLD}Production   (Estrutura & Léxico C1):{RESET} {_bar(prod_score)} {BOLD}{prod_score}/160{RESET}")
+    recent_scores = [str(x.get("overall", 0)) for x in STATS.get("speaking_coach_scores", [])[-5:]]
+    if len(recent_scores) > 1:
+        print(f"{BOLD}{MAGENTA}╟──────────────────────────────────────────────────────────────────────╢{RESET}")
+        print(f"{BOLD}{MAGENTA}║{RESET} 📈 {BOLD}Evolução no Speaking Coach (últimos treinos):{RESET} {CYAN}{' ➔ '.join(recent_scores)} pts{RESET}")
+    print(f"{BOLD}{MAGENTA}╚══════════════════════════════════════════════════════════════════════╝{RESET}")
 
 def extract_eval_scores(feedback_text, default_conv=60, default_prod=55):
     """Extracts realistic Conversation and Production subscores from AI feedback."""
@@ -2977,15 +3069,251 @@ def get_ffmpeg_mic_cmd(output_path, duration_sec=90):
         return ["ffmpeg", "-y", "-f", "dshow", "-i", f"audio={mic_name}", "-t", str(duration_sec), "-ac", "1", "-ar", "16000", output_path]
     return ["ffmpeg", "-y", "-f", "pulse", "-i", "default", "-t", str(duration_sec), "-ac", "1", "-ar", "16000", output_path]
 
+def record_mic_clip(output_path, duration_sec=30, label="Gravando áudio"):
+    """Records microphone audio for up to duration_sec with visual progress bar and Ctrl+C early stop."""
+    if os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+        except Exception:
+            pass
+
+    rec_proc = subprocess.Popen(
+        get_ffmpeg_mic_cmd(output_path, duration_sec),
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+    elapsed = 0
+    try:
+        for remaining in range(duration_sec, 0, -1):
+            elapsed = duration_sec - remaining + 1
+            mins, secs = divmod(remaining, 60)
+            bar_len = int((duration_sec - remaining) / max(1, duration_sec) * 28)
+            progress = "█" * bar_len + "░" * (28 - bar_len)
+            color = GREEN if remaining > (duration_sec * 0.35) else (YELLOW if remaining > 5 else RED)
+            print(f"\r[{progress}] {label}: {color}{mins:02d}:{secs:02d}{RESET} (Ctrl+C p/ encerrar)...", end="", flush=True)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print(f"\n{CYAN}✓ Gravação encerrada pelo usuário ({elapsed}s).{RESET}")
+    finally:
+        if rec_proc.poll() is None:
+            try:
+                if rec_proc.stdin:
+                    rec_proc.stdin.write(b"q\n")
+                    rec_proc.stdin.flush()
+            except Exception:
+                pass
+            time.sleep(0.4)
+            if rec_proc.poll() is None:
+                try:
+                    rec_proc.terminate()
+                except Exception:
+                    pass
+    print()
+    return os.path.exists(output_path) and os.path.getsize(output_path) > 4000
+
+
+def _extract_speak_model_sentence(feedback_text):
+    """Extracts the SPEAK_MODEL target sentence from AI feedback if present."""
+    if not feedback_text:
+        return ""
+    for line in feedback_text.splitlines():
+        if "SPEAK_MODEL:" in line:
+            return line.split("SPEAK_MODEL:", 1)[1].strip().strip('"').strip("*")
+    return ""
+
+
+def _offer_speaking_second_shot(prompt, ai_feedback, photo_path=None):
+    """Interactive post-feedback loop: listen to native model sentence, shadow it, or re-record a Second Shot."""
+    model_sent = _extract_speak_model_sentence(ai_feedback)
+    while True:
+        print(f"\n{MAGENTA}┌── 🔄 CICLO DE CONSOLIDAÇÃO ATIVA DA FALA (SECOND SHOT & SHADOWING) ───┐{RESET}")
+        if model_sent:
+            print(f"  🎯 {BOLD}Frase-Modelo C1:{RESET} {GREEN}\"{model_sent}\"{RESET}")
+        print(f"  {BOLD}[O]{RESET} 🔊 Ouvir a frase-modelo C1 com pronúncia nativa (TTS)")
+        print(f"  {BOLD}[S]{RESET} 🎙️  Treinar Shadowing (15s — repetir a frase-modelo em voz alta e checar pronúncia)")
+        print(f"  {BOLD}[R]{RESET} 🔥 Second Shot (60s — regravar sua resposta aplicando as correções da IA)")
+        print(f"  {BOLD}[ENTER]{RESET} Concluir e voltar")
+        print(f"{MAGENTA}└───────────────────────────────────────────────────────────────────────┘{RESET}")
+        try:
+            act = input(f"{CYAN}Escolha [O / S / R / ENTER]: {RESET}").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if not act:
+            break
+        elif act == "o":
+            text_to_speak = model_sent or "Although there are challenges, I contend that this approach is crucial. For instance, it significantly enhances efficiency. Ultimately, it fosters long-term progress."
+            print(f"{CYAN}🔊 Reproduzindo pronúncia modelo...{RESET}")
+            speak_text(text_to_speak)
+        elif act == "s":
+            target_s = model_sent or "Ultimately, provided that governments enforce strict regulations to mitigate potential risks, this innovation will foster long-term progress."
+            print(f"\n{CYAN}🔊 Ouça com atenção o ritmo e a entonação:{RESET}")
+            print(f"   {GREEN}{BOLD}\"{target_s}\"{RESET}")
+            speak_text(target_s)
+            print(f"\n{GREEN}{BOLD}>>> REPITA EM VOZ ALTA AGORA! (15s — Ctrl+C ao terminar) <<<{RESET}")
+            sh_path = os.path.join(tempfile.gettempdir(), "det_shadow_quick.wav")
+            if record_mic_clip(sh_path, 15, "Shadowing"):
+                if get_gemini_key():
+                    print(f"{CYAN}🤖 Avaliando sua pronúncia e ritmo na frase-modelo...{RESET}")
+                    sh_sys = (
+                        "Você é um Coach de Pronúncia e Prosódia do DET. O aluno acabou de fazer Shadowing da frase-alvo.\n"
+                        "Forneça um feedback curto e direto (máximo 8 linhas):\n"
+                        "1. 🎙️ Transcrição do que foi ouvido vs. Frase-Alvo\n"
+                        "2. 🎯 Precisão Fonética (0 a 100%) e palavras que precisam de ajuste (com pronúncia figurada para brasileiros)\n"
+                        "3. ⚡ Ritmo, linking sounds e entonação."
+                    )
+                    sh_fb = analyze_audio_with_gemini(sh_path, f"Target Sentence: {target_s}", custom_sys_inst=sh_sys)
+                    if sh_fb:
+                        print(f"\n{GREEN}── FEEDBACK DE SHADOWING ──{RESET}\n{sh_fb}")
+        elif act == "r":
+            print(f"\n{GREEN}{BOLD}>>> SECOND SHOT (60s): FALE SUA RESPOSTA REFINADA AGORA! <<<{RESET}")
+            ss_path = os.path.join(tempfile.gettempdir(), "det_second_shot.wav")
+            if record_mic_clip(ss_path, 60, "Second Shot"):
+                if get_gemini_key():
+                    print(f"{CYAN}🤖 Avaliando sua evolução na 2ª tentativa (Second Shot)...{RESET}")
+                    ss_fb = analyze_audio_with_gemini(
+                        ss_path,
+                        f"SECOND SHOT ATTEMPT for prompt: {prompt}",
+                        image_path=photo_path
+                    )
+                    if ss_fb:
+                        print(f"\n{BOLD}{GREEN}🏆 AVALIAÇÃO DO SEU SECOND SHOT:{RESET}\n{ss_fb}")
+                        c_sc, p_sc = extract_eval_scores(ss_fb, default_conv=90, default_prod=90)
+                        record_skill_score("conversation", c_sc)
+                        record_skill_score("production", p_sc)
+                        print_speaking_coach_scorecard(c_sc, p_sc, mode_label="SECOND SHOT (REFINAMENTO)")
+
+
+def run_speak_about_photo_official():
+    """Official DET 'Speak About the Photo' Simulator (20s prep + 90s speaking + Multimodal Image & Audio evaluation)."""
+    header()
+    print(f"\n{BOLD}{MAGENTA}[SKILL 8C: SPEAK ABOUT THE PHOTO — SIMULADOR OFICIAL (20s Prep + 90s Fala)]{RESET}")
+    print(f"{DIM}Descreva a fotografia em voz alta por até 90 segundos usando a estrutura T-I-T (Visão Geral ➔ Planos ➔ Atmosfera/Hipótese).{RESET}\n")
+
+    os.makedirs(PHOTOS_DIR, exist_ok=True)
+    unseen_live = get_unseen_live_photos()
+    chosen_file = random.choice(unseen_live) if unseen_live else fetch_dynamic_real_photo()
+
+    valid_exts = (".jpg", ".jpeg", ".png", ".webp")
+    photo_files = [f for f in os.listdir(PHOTOS_DIR) if f.lower().endswith(valid_exts)]
+    if not photo_files:
+        print(f"{RED}Nenhuma foto encontrada em {PHOTOS_DIR}.{RESET}")
+        input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+        return
+
+    if not chosen_file:
+        unseen_any = [f for f in photo_files if not is_item_seen("photo_speak", f)]
+        chosen_file = random.choice(unseen_any) if unseen_any else random.choice(photo_files)
+    mark_item_seen("photo_speak", chosen_file)
+
+    photo_path = os.path.join(PHOTOS_DIR, chosen_file)
+    photo_title = chosen_file.rsplit(".", 1)[0].replace("_", " ").title()
+    mission = get_c1_lexical_mission(3)
+
+    print_c1_mission_banner(mission)
+    print(f"{BOLD}📐 Dica de Estrutura T-I-T para falar por 90s sem travar:{RESET}")
+    print(f"  • {GREEN}[T]{RESET} This photograph captures a candid scene of [quem/o quê + -ing] in [ambiente]...")
+    print(f"  • {GREEN}[I]{RESET} In the foreground, we can observe [...], whereas the background reveals [...]")
+    print(f"  • {GREEN}[T]{RESET} The natural lighting conveys a sense of [...], suggesting that [...]\n")
+
+    input(f"{GREEN}Pressione [ENTER] para abrir a foto e iniciar os 20s de PREPARAÇÃO...{RESET}")
+
+    viewer_candidates = [
+        os.path.join(SCRIPT_DIR, "det_photo_viewer.py"),
+        os.path.join(SCRIPT_DIR, "det-photo-viewer"),
+        os.path.expanduser("~/.local/bin/det-photo-viewer")
+    ]
+    viewer_tool = next((p for p in viewer_candidates if os.path.exists(p)), None)
+    viewer_proc = None
+    if viewer_tool:
+        try:
+            viewer_proc = subprocess.Popen(
+                [sys.executable, viewer_tool, photo_path, "115", f"SPEAK ABOUT THE PHOTO: {photo_title}"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception:
+            pass
+
+    try:
+        for remaining in range(20, 0, -1):
+            print(f"\r{YELLOW}Observe a foto e planeje sua fala: {remaining:02d}s restantes...{RESET}", end="", flush=True)
+            time.sleep(1)
+
+        print(f"\a\n\n{GREEN}{BOLD}>>> DESCREVA A FOTO EM VOZ ALTA AGORA! MICROFONE ATIVO (90s) <<<{RESET}")
+        print(f"{DIM}(Pressione [Ctrl+C] se terminar de falar antes dos 90 segundos){RESET}\n")
+
+        audio_rec_path = os.path.join(tempfile.gettempdir(), "det_speak_photo_rec.wav")
+        captured = record_mic_clip(audio_rec_path, 90, "Speak About Photo")
+    finally:
+        if viewer_proc:
+            try:
+                viewer_proc.terminate()
+            except Exception:
+                pass
+
+    if captured and get_gemini_key():
+        print(f"\n{CYAN}🤖 Enviando a FOTO REAL + SUA VOZ para o Google Gemini Multimodal...{RESET}")
+        photo_sys = (
+            "Você é um Examinador Sênior Oficial do Duolingo English Test (DET) avaliando a tarefa 'Speak About the Photo' (90 segundos).\n"
+            "Você está recebendo a IMAGEM REAL da questão e o ÁUDIO da fala do candidato.\n"
+            "Estruture sua avaliação em:\n"
+            "1. 🎙️ TRANSCRIÇÃO EXATA DA FALA:\n"
+            "2. 👁️ PRECISÃO VISUAL & DETALHAMENTO (O candidato descreveu elementos reais do primeiro plano, fundo, ação e atmosfera da foto? O que faltou mencionar?):\n"
+            "3. ⚡ FLUÊNCIA, PRONÚNCIA & PROSÓDIA (Ritmo, pausas e palavras pronunciadas incorretamente com dica fonética):\n"
+            "4. 📝 GRAMÁTICA & VOCABULÁRIO C1 (Correções das frases faladas):\n"
+            "5. ✨ RESPOSTA MODELO B2/C1 FALADA (Usando a estrutura T-I-T fiel à foto):\n"
+            "   Inclua também a frase-destaque em uma linha única após o marcador EXATO 'SPEAK_MODEL: '.\n"
+            "Ao final absoluto, inclua obrigatoriamente:\n"
+            "[DET_EVAL: CONVERSATION=<nota_de_10_a_160>, PRODUCTION=<nota_de_10_a_160>]"
+        )
+        ai_feedback = analyze_audio_with_gemini(
+            audio_rec_path,
+            f"Speak About the Photo ({photo_title})",
+            image_path=photo_path,
+            custom_sys_inst=photo_sys
+        )
+        if ai_feedback:
+            print(f"\n{BOLD}{CYAN}AVALIAÇÃO MULTIMODAL (FOTO + VOZ — SPEAK ABOUT THE PHOTO):{RESET}")
+            print(ai_feedback)
+            evaluate_c1_mission_and_cliches(ai_feedback, mission)
+
+            conv_score, prod_score = extract_eval_scores(ai_feedback)
+            record_skill_score("conversation", conv_score)
+            record_skill_score("production", prod_score)
+            print_speaking_coach_scorecard(conv_score, prod_score, mode_label="SPEAK ABOUT THE PHOTO (90s)")
+
+            model_s = _extract_speak_model_sentence(ai_feedback)
+            push_to_anki(
+                subdeck_name="Speaking Feedback",
+                front_html=f"<b>[DET: Speak About the Photo]</b><br><br><b>Tema da Foto:</b> {photo_title}",
+                back_html=f"<h3>Análise Multimodal ({conv_score}/160):</h3><div style='text-align:left;'>{ai_feedback.replace(chr(10), '<br>')}</div>",
+                tags=["DET", "DET_SpeakPhoto"],
+                audio_text=model_s or None
+            )
+            print(f"\n{YELLOW}📥 Card com feedback e áudio modelo enviado ao Anki!{RESET}")
+            _offer_speaking_second_shot(f"Speak About the Photo: {photo_title}", ai_feedback, photo_path=photo_path)
+
+    update_streak()
+    input(f"\n{DIM}Pressione [ENTER] para voltar ao menu...{RESET}")
+
+
 def run_speaking_drill(force_ai=True):
     header()
-    print(f"\n{BOLD}{MAGENTA}[SKILL 8: SPEAKING SIMULATOR (READ/LISTEN, THEN SPEAK - 90s)]{RESET}")
-    print("Escolha a modalidade oficial do DET que deseja treinar:")
-    print(f"  {BOLD}1){RESET} Read, Then Speak   {DIM}(Pergunta escrita visível na tela){RESET}")
-    print(f"  {BOLD}2){RESET} Listen, Then Speak {DIM}(Pergunta cega apenas em áudio - Oficial DET){RESET}")
+    print(f"\n{BOLD}{MAGENTA}[SKILL 8: SPEAKING SIMULATOR OFICIAL DET (90s)]{RESET}")
+    print("Escolha a modalidade oficial de fala do DET que deseja simular:")
+    print(f"  {BOLD}1){RESET} Read, Then Speak    {DIM}(Pergunta escrita visível na tela - 20s prep / 90s fala){RESET}")
+    print(f"  {BOLD}2){RESET} Listen, Then Speak  {DIM}(Pergunta cega apenas em áudio - 20s prep / 90s fala){RESET}")
+    print(f"  {BOLD}3){RESET} Speak About Photo   {DIM}(Fotografia real na tela + descrição falada em 90s){RESET}")
+    print(f"  {BOLD}4){RESET} Ir para o {MAGENTA}{BOLD}Speaking Coach & Fluency Gym{RESET} {DIM}(Treino passo a passo p/ destravar){RESET}")
     try:
-        mode_choice = input(f"\n{CYAN}Modalidade [1/2, padrão=1]: {RESET}").strip()
+        mode_choice = input(f"\n{CYAN}Modalidade [1-4, padrão=1]: {RESET}").strip()
     except (KeyboardInterrupt, EOFError):
+        return
+    if mode_choice == "3":
+        run_speak_about_photo_official()
+        return
+    if mode_choice == "4":
+        run_speaking_coach()
         return
     blind_audio_mode = (mode_choice == "2")
 
@@ -3031,8 +3359,10 @@ def run_speaking_drill(force_ai=True):
     else:
         print(f"{BOLD}PROMPT DE FALA:{RESET}")
         print(f"{YELLOW}{prompt}{RESET}\n")
-        print("Estrutura recomendada:")
-        print("  1. Resposta direta (15s) | 2. Exemplo com 'for instance' (45s) | 3. Conclusão com 'ultimately' (30s)\n")
+        print("Estrutura recomendada (A-P-F-U adaptada para 90s de fala):")
+        print("  1. Tese direta: 'Although..., I contend that...' (20s)")
+        print("  2. Mecanismo + Exemplo: 'Primarily, this is because... For instance...' (45s)")
+        print("  3. Conclusão: 'Ultimately, provided that...' (25s)\n")
         input(f"{GREEN}Pressione [ENTER] para iniciar os 20s de PREPARAÇÃO mental...{RESET}")
 
     for remaining in range(20, 0, -1):
@@ -3043,46 +3373,15 @@ def run_speaking_drill(force_ai=True):
     print(f"{DIM}(Se terminar antes dos 90 segundos, pressione [Ctrl+C] para encerrar e enviar para análise){RESET}\n")
 
     audio_rec_path = os.path.join(tempfile.gettempdir(), "det_speaking_rec.wav")
-    if os.path.exists(audio_rec_path):
-        os.remove(audio_rec_path)
+    captured = record_mic_clip(audio_rec_path, 90, "Gravando áudio")
 
-    rec_proc = subprocess.Popen(
-        get_ffmpeg_mic_cmd(audio_rec_path, 90),
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-
-    try:
-        for remaining in range(90, 0, -1):
-            mins, secs = divmod(remaining, 60)
-            bar_len = int((90 - remaining) / 90 * 30)
-            progress = "█" * bar_len + "░" * (30 - bar_len)
-            color = GREEN if remaining > 30 else (YELLOW if remaining > 10 else RED)
-            print(f"\r[{progress}] Gravando áudio: {color}{mins:02d}:{secs:02d}{RESET} restantes...", end="", flush=True)
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n\nGravação finalizada pelo usuário.")
-    finally:
-        if rec_proc.poll() is None:
-            try:
-                if rec_proc.stdin:
-                    rec_proc.stdin.write(b"q\n")
-                    rec_proc.stdin.flush()
-            except Exception:
-                pass
-            time.sleep(0.4)
-            if rec_proc.poll() is None:
-                try:
-                    rec_proc.terminate()
-                except Exception:
-                    pass
-
-    print(f"\a\n\n{CYAN}{BOLD}ÁUDIO CAPTURADO COM SUCESSO!{RESET}")
+    print(f"\a\n{CYAN}{BOLD}ÁUDIO CAPTURADO COM SUCESSO!{RESET}")
     if blind_audio_mode:
         print(f"\n{BOLD}📜 Revelando a Pergunta Auditiva Original:{RESET}")
         print(f"{YELLOW}{prompt}{RESET}")
 
     gemini_key = get_gemini_key()
-    if gemini_key and os.path.exists(audio_rec_path) and os.path.getsize(audio_rec_path) > 10000:
+    if gemini_key and captured:
         print(f"\n{CYAN}🤖 Enviando seu áudio para a IA do Google Gemini (Análise Multimodal)...{RESET}")
         ai_feedback = analyze_audio_with_gemini(audio_rec_path, prompt)
         if ai_feedback:
@@ -3090,22 +3389,23 @@ def run_speaking_drill(force_ai=True):
             print(ai_feedback)
             evaluate_c1_mission_and_cliches(ai_feedback, mission)
 
+            model_s = _extract_speak_model_sentence(ai_feedback)
             front = f"<b>[DET: Speaking Simulator]</b><br><br><b>Pergunta:</b> {prompt}<br><br><i>[Feedback da sua fala]</i>"
             back = f"<h3>Análise da IA:</h3><div style='text-align:left;'>{ai_feedback.replace(chr(10), '<br>')}</div>"
             push_to_anki(
                 subdeck_name="Speaking Feedback",
                 front_html=front,
                 back_html=back,
-                tags=["DET", "DET_Speaking"]
+                tags=["DET", "DET_Speaking"],
+                audio_text=model_s or None
             )
             print(f"\n{YELLOW}📥 Análise de fala enviada ao Anki em segundo plano!{RESET}")
 
             conv_score, prod_score = extract_eval_scores(ai_feedback)
             record_skill_score("conversation", conv_score)
             record_skill_score("production", prod_score)
-            print(f"\n{BOLD}📊 Subscores Oficiais Registrados no Dashboard DET:{RESET}")
-            print(f"  • Conversation: {CYAN}{conv_score}/160 pts{RESET}")
-            print(f"  • Production:   {CYAN}{prod_score}/160 pts{RESET}")
+            print_speaking_coach_scorecard(conv_score, prod_score, mode_label="SPEAKING SIMULATOR (90s)")
+            _offer_speaking_second_shot(prompt, ai_feedback)
         else:
             record_skill_progress(["conversation", "production"], 0, 1)
     else:
@@ -4155,6 +4455,483 @@ def _run_pt_to_c1_bridge_coach():
                     break
 
 
+# ==============================================================================
+# 11B. STRUCTURE MEMORY GYM (LACUNAS PROGRESSIVAS + DRILL RELÂMPAGO A-P-F-U / T-I-T)
+# ==============================================================================
+C1_STRUCTURE_DECK = [
+    {
+        "group": "essay",
+        "acronym": "A",
+        "code": "A-P-F-U (1/4)",
+        "title": "FRASE 1/4 (REDAÇÃO) — Tese + Concessão",
+        "trigger_pt": "Apresentar os dois lados do tema e cravar sua opinião principal",
+        "chassis_display": "Although [risco/benefício], I contend that [sua tese] because [motivo].",
+        "chassis_clean": "Although ..., I contend that ... because ...",
+        "keywords": ["although", "i", "contend", "that", "because"],
+        "hint_lvl1": "A_______ [...], I c______ t___ [...] b______ [...].",
+        "hint_lvl2": "________ [...], _ _______ ____ [...] _______ [...].",
+        "chunks": [
+            "Although [risco/benefício],",
+            "I contend that",
+            "[sua tese principal]",
+            "because [motivo central]."
+        ],
+        "example": "Although artificial intelligence poses privacy risks, I contend that its educational benefits outweigh the drawbacks because it personalizes learning."
+    },
+    {
+        "group": "essay",
+        "acronym": "P",
+        "code": "A-P-F-U (2/4)",
+        "title": "FRASE 2/4 (REDAÇÃO) — Mecanismo / Causa e Efeito",
+        "trigger_pt": "Explicar como o seu argumento funciona na prática e qual o impacto dele",
+        "chassis_display": "Primarily, this is because [mecanismo], which significantly mitigates [problema].",
+        "chassis_clean": "Primarily, this is because ..., which significantly mitigates ...",
+        "keywords": ["primarily", "this", "is", "because", "which", "significantly", "mitigates"],
+        "alt_keywords": {"mitigates": ["reduces", "enhances", "improves"]},
+        "hint_lvl1": "P________, t___ i_ b______ [...], w____ s____________ m________ [...].",
+        "hint_lvl2": "_________, ____ __ _______ [...], _____ _____________ _________ [...].",
+        "chunks": [
+            "Primarily,",
+            "this is because [como funciona],",
+            "which significantly",
+            "mitigates [o problema/resultado]."
+        ],
+        "example": "Primarily, this is because adaptive algorithms identify knowledge gaps instantly, which significantly mitigates student frustration."
+    },
+    {
+        "group": "essay",
+        "acronym": "F",
+        "code": "A-P-F-U (3/4)",
+        "title": "FRASE 3/4 (REDAÇÃO) — Exemplo Concreto de Área",
+        "trigger_pt": "Ancorar seu argumento com um exemplo real de um setor ou área",
+        "chassis_display": "For instance, in the field of [área/setor], [exemplo concreto].",
+        "chassis_clean": "For instance, in the field of ..., ...",
+        "keywords": ["for", "instance", "in", "the", "field", "of"],
+        "hint_lvl1": "F__ i_______, i_ t__ f____ o_ [área], [exemplo concreto].",
+        "hint_lvl2": "___ ________, __ ___ _____ __ [área], [exemplo concreto].",
+        "chunks": [
+            "For instance,",
+            "in the field of",
+            "[educação / medicina / tecnologia],",
+            "[exemplo prático real]."
+        ],
+        "example": "For instance, in the field of higher education, virtual tutors allow struggling students to master complex concepts at their own pace."
+    },
+    {
+        "group": "essay",
+        "acronym": "U",
+        "code": "A-P-F-U (4/4)",
+        "title": "FRASE 4/4 (REDAÇÃO) — Conclusão Condicional C1",
+        "trigger_pt": "Fechar a redação com chave de ouro impondo uma condição inteligente",
+        "chassis_display": "Ultimately, provided that governments enforce strict regulations to mitigate potential risks, [conclusão].",
+        "chassis_clean": "Ultimately, provided that governments enforce strict regulations to mitigate potential risks, ...",
+        "keywords": ["ultimately", "provided", "that", "governments", "enforce", "strict", "regulations", "to", "mitigate", "potential", "risks"],
+        "hint_lvl1": "U_________, p_______ t___ g__________ e______ s_____ r__________ t_ m_______ p________ r____, [conclusão].",
+        "hint_lvl2": "__________, ________ ____ ___________ _______ ______ ___________ __ ________ _________ _____, [conclusão].",
+        "chunks": [
+            "Ultimately,",
+            "provided that governments enforce",
+            "strict regulations",
+            "to mitigate potential risks, [conclusão]."
+        ],
+        "example": "Ultimately, provided that governments enforce strict regulations to mitigate potential risks, this innovation will foster long-term progress."
+    },
+    {
+        "group": "photo",
+        "acronym": "T",
+        "code": "T-I-T (1/3)",
+        "title": "FRASE 1/3 (FOTO) — Visão Geral & Ação Principal",
+        "trigger_pt": "Abrir a descrição da foto dizendo o que a cena captura no geral",
+        "chassis_display": "This photograph captures a candid scene of [quem/o quê] in [ambiente].",
+        "chassis_clean": "This photograph captures a candid scene of ... in ...",
+        "keywords": ["this", "photograph", "captures", "a", "candid", "scene", "of", "in"],
+        "hint_lvl1": "T___ p_________ c_______ a c_____ s____ o_ [sujeito + -ing] i_ [lugar].",
+        "hint_lvl2": "____ __________ ________ _ ______ _____ __ [sujeito + -ing] __ [lugar].",
+        "chunks": [
+            "This photograph",
+            "captures a candid scene of",
+            "[sujeito + verbo com -ing]",
+            "in [ambiente/lugar]."
+        ],
+        "example": "This photograph captures a candid scene of a concentrated engineer inspecting equipment in a modern laboratory."
+    },
+    {
+        "group": "photo",
+        "acronym": "I",
+        "code": "T-I-T (2/3)",
+        "title": "FRASE 2/3 (FOTO) — Primeiro Plano vs. Plano de Fundo",
+        "trigger_pt": "Contrastar o que está na frente da imagem com o que aparece atrás",
+        "chassis_display": "In the foreground, [detalhe da frente], whereas the background reveals [detalhe do fundo].",
+        "chassis_clean": "In the foreground, ..., whereas the background reveals ...",
+        "keywords": ["in", "the", "foreground", "whereas", "the", "background", "reveals"],
+        "hint_lvl1": "I_ t__ f_________, [frente], w______ t__ b_________ r______ [fundo].",
+        "hint_lvl2": "__ ___ __________, [frente], _______ ___ __________ _______ [fundo].",
+        "chunks": [
+            "In the foreground,",
+            "[detalhe da frente],",
+            "whereas the background",
+            "reveals [detalhe do fundo]."
+        ],
+        "example": "In the foreground, technical blueprints are spread across a desk, whereas the background reveals bright industrial machinery."
+    },
+    {
+        "group": "photo",
+        "acronym": "T",
+        "code": "T-I-T (3/3)",
+        "title": "FRASE 3/3 (FOTO) — Iluminação, Atmosfera & Hipótese",
+        "trigger_pt": "Descrever a sensação que a luz transmite e fazer uma inferência final",
+        "chassis_display": "The natural lighting conveys a sense of [emoção/foco], suggesting that [hipótese].",
+        "chassis_clean": "The natural lighting conveys a sense of ..., suggesting that ...",
+        "keywords": ["the", "natural", "lighting", "conveys", "a", "sense", "of", "suggesting", "that"],
+        "hint_lvl1": "T__ n______ l_______ c______ a s____ o_ [foco/calma], s_________ t___ [hipótese].",
+        "hint_lvl2": "___ _______ ________ _______ _ _____ __ [foco/calma], __________ ____ [hipótese].",
+        "chunks": [
+            "The natural lighting",
+            "conveys a sense of [foco/calma],",
+            "suggesting that",
+            "[hipótese sobre a cena]."
+        ],
+        "example": "The natural lighting conveys a sense of deep focus, suggesting that the team is preparing for an important project launch."
+    }
+]
+
+
+def _evaluate_structure_attempt(user_text, item):
+    """Evaluates whether the user typed the core structural connectors of an item."""
+    # Remove bracketed placeholders if the user typed them
+    cleaned_user = re.sub(r"\[[^\]]*\]", " ", user_text.lower())
+    user_tokens = re.findall(r"[a-z]+", cleaned_user)
+    user_set = set(user_tokens)
+    alt_map = item.get("alt_keywords", {})
+
+    matched = 0
+    feedback_parts = []
+    used_indices = set()
+
+    for kw in item["keywords"]:
+        candidates = [kw] + alt_map.get(kw, [])
+        found = False
+        for idx, tok in enumerate(user_tokens):
+            if idx not in used_indices and tok in candidates:
+                found = True
+                used_indices.add(idx)
+                break
+        if not found and any(c in user_set for c in candidates):
+            found = True
+
+        if found:
+            matched += 1
+            feedback_parts.append(f"{GREEN}{BOLD}{kw}{RESET}")
+        else:
+            feedback_parts.append(f"{RED}{BOLD}[{kw}]{RESET}")
+
+    total_kw = max(1, len(item["keywords"]))
+    pct = int(round((matched / total_kw) * 100))
+    return pct, " ".join(feedback_parts), matched, total_kw
+
+
+def _run_progressive_cloze_drill():
+    header()
+    print(f"\n{BOLD}{GREEN}[TREINO 1: LACUNAS PROGRESSIVAS (TIRANDO AS RODINHAS EM 3 NÍVEIS)]{RESET}")
+    print(f"{DIM}Você vai digitar apenas o ESQUELETO (conectivos C1). Não precisa inventar redação inteira!{RESET}")
+    print(f"{DIM}Pode colocar '...' nos buracos das ideias (ex: Although ..., I contend that ... because ...){RESET}\n")
+
+    print(f"  {BOLD}1){RESET} 🏗️  Kit Redação 4 Frases — Fórmula {GREEN}{BOLD}A-P-F-U{RESET} (Although ➔ Primarily ➔ For instance ➔ Ultimately)")
+    print(f"  {BOLD}2){RESET} 📸 Kit Foto 3 Frases    — Fórmula {CYAN}{BOLD}T-I-T{RESET}   (This photograph ➔ In the foreground ➔ The natural lighting)")
+    print(f"  {BOLD}3){RESET} 🔥 Combo Completo       — Todas as 7 Estruturas (Redação + Foto)")
+
+    try:
+        kit_choice = input(f"\n{CYAN}Escolha o kit para decorar [1-3, padrão=1]: {RESET}").strip() or "1"
+    except (KeyboardInterrupt, EOFError):
+        return
+
+    if kit_choice == "2":
+        items = [x for x in C1_STRUCTURE_DECK if x["group"] == "photo"]
+    elif kit_choice == "3":
+        items = list(C1_STRUCTURE_DECK)
+    else:
+        items = [x for x in C1_STRUCTURE_DECK if x["group"] == "essay"]
+
+    print(f"\n{BOLD}Escolha o Nível de Retirada de Dicas:{RESET}")
+    print(f"  {BOLD}1){RESET} 🟢 {BOLD}Nível 1 (Com Iniciais){RESET}  — Mostra a 1ª letra de cada conectivo (ex: A_______ ..., I c______ t___ ...)")
+    print(f"  {BOLD}2){RESET} 🟡 {BOLD}Nível 2 (Lacuna Cega){RESET}   — Mostra apenas os traços (ex: ________ ..., _ _______ ____ ...)")
+    print(f"  {BOLD}3){RESET} 🔴 {BOLD}Nível 3 (De Cabeça!){RESET}    — Sem dica visual! Só o objetivo da frase e a letra-gatilho")
+    print(f"  {BOLD}4){RESET} 🚀 {BOLD}Escada Completa (1➔2➔3){RESET} — Passa a mesma frase pelo Nível 1, depois 2 e depois 3 na sequência!")
+
+    try:
+        lvl_choice = input(f"\n{CYAN}Escolha o nível [1-4, padrão=4 (Escada Completa)]: {RESET}").strip() or "4"
+    except (KeyboardInterrupt, EOFError):
+        return
+
+    levels_to_run = [1, 2, 3] if lvl_choice == "4" else ([int(lvl_choice)] if lvl_choice in ["1", "2", "3"] else [1, 2, 3])
+
+    total_pct_acc = []
+    for idx, item in enumerate(items, 1):
+        print("\n" + "═" * 74)
+        print(f"{BOLD}{MAGENTA}🎯 ESTRUTURA {idx}/{len(items)}: [{item['code']}] — {item['title']}{RESET}")
+        print(f"   💡 {BOLD}Quando usar:{RESET} {item['trigger_pt']}")
+        if len(levels_to_run) > 1:
+            print(f"   📐 {DIM}Alvo completo: {item['chassis_display']}{RESET}")
+        print("═" * 74)
+
+        for lvl in levels_to_run:
+            if lvl == 1:
+                badge = f"{GREEN}[NÍVEL 1/3 — COM INICIAIS]{RESET}"
+                cue = f"   🧩 {BOLD}Complete o chassi:{RESET} {YELLOW}{item['hint_lvl1']}{RESET}"
+            elif lvl == 2:
+                badge = f"{YELLOW}[NÍVEL 2/3 — LACUNAS CEGAS]{RESET}"
+                cue = f"   🧩 {BOLD}Lembre os conectivos:{RESET} {YELLOW}{item['hint_lvl2']}{RESET}"
+            else:
+                badge = f"{RED}{BOLD}[NÍVEL 3/3 — DE CABEÇA SEM COLA!]{RESET}"
+                cue = f"   🧠 {BOLD}Letra-Gatilho [{item['acronym']}]:{RESET} Digite o chassi completo de memória!"
+
+            print(f"\n  {badge}")
+            print(cue)
+            try:
+                ans = input(f"   ✍️  {BOLD}Digite o chassi:{RESET} ").strip()
+            except (KeyboardInterrupt, EOFError):
+                return
+
+            if not ans:
+                print(f"   {YELLOW}⏭️  Pulando... O chassi correto é:{RESET} {GREEN}{item['chassis_clean']}{RESET}")
+                continue
+
+            pct, diff_str, matched, total_kw = _evaluate_structure_attempt(ans, item)
+            total_pct_acc.append(pct)
+
+            if pct == 100:
+                print(f"   {GREEN}{BOLD}✓ PERFEITO (100%)!{RESET} Todos os {total_kw} conectivos do chassi cravados: {diff_str}")
+            else:
+                print(f"   {YELLOW}📊 Precisão do chassi: {BOLD}{pct}% ({matched}/{total_kw} palavras-chave){RESET}")
+                print(f"   🔍 {BOLD}Raio-X:{RESET} {diff_str}  {DIM}(em vermelho = faltou ou trocou){RESET}")
+                print(f"   📐 {BOLD}Gabarito Limpo:{RESET} {GREEN}{BOLD}{item['chassis_clean']}{RESET}")
+                try:
+                    fix = input(f"   ⌨️  {CYAN}Redigite o gabarito limpo acima 1x para corrigir a memória motora:{RESET}\n      > ").strip()
+                    if fix:
+                        print(f"      {GREEN}✓ Gravado nos dedos!{RESET}")
+                except (KeyboardInterrupt, EOFError):
+                    return
+
+        speak_text(item["example"])
+
+    if total_pct_acc:
+        avg_ret = int(sum(total_pct_acc) / len(total_pct_acc))
+        lit_eq = min(145, max(70, int(65 + (avg_ret * 0.7))))
+        record_skill_score("literacy", lit_eq)
+        record_skill_score("production", lit_eq)
+        print("\n" + "═" * 74)
+        print(f"🏆 {BOLD}RESUMO DO TREINO DE MEMORIZAÇÃO:{RESET} Retenção Média dos Chassis = {GREEN}{BOLD}{avg_ret}%{RESET}")
+        if avg_ret >= 90:
+            print(f"{GREEN}🔥 Excelente! Essas estruturas já estão prontas para sair no automático na prova!{RESET}")
+        else:
+            print(f"{YELLOW}💡 Dica: Repita o Nível 3 amanhã até bater 95%+ sem olhar a cola.{RESET}")
+        print("═" * 74)
+        update_streak()
+
+    input(f"\n{DIM}Pressione [ENTER] para voltar à Academia de Estruturas...{RESET}")
+
+
+def _run_lightning_chassis_drill():
+    header()
+    print(f"\n{BOLD}{GREEN}[TREINO 2: ⚡ DRILL RELÂMPAGO DE CHASSIS (SIMULADOR DOS PRIMEIROS 15s DA PROVA)]{RESET}")
+    print(f"{DIM}Na prova real, seu objetivo é despejar os 4 esqueletos na caixa de texto nos primeiros 20 segundos.{RESET}")
+    print(f"{DIM}Responda a cada missão digitando apenas o chassi em inglês o mais rápido que conseguir!{RESET}\n")
+
+    pool = list(C1_STRUCTURE_DECK)
+    random.shuffle(pool)
+
+    input(f"{GREEN}Pressione [ENTER] para disparar a bateria relâmpago ({len(pool)} gatilhos)...{RESET}")
+
+    times = []
+    scores = []
+    for idx, item in enumerate(pool, 1):
+        print(f"\n{BOLD}{CYAN}⚡ DESAFIO {idx}/{len(pool)} — [{item['code']}]{RESET}")
+        print(f"   🎯 {BOLD}Missão:{RESET} {YELLOW}{item['trigger_pt']}{RESET}")
+        print(f"   🔑 {BOLD}Letra-Gatilho:{RESET} Começa com {GREEN}{BOLD}\"{item['acronym']}...\"{RESET}")
+
+        t0 = time.time()
+        try:
+            ans = input(f"\n   ⌨️  {BOLD}Chassi em inglês:{RESET} ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+        elapsed = round(time.time() - t0, 1)
+
+        if not ans:
+            print(f"   {RED}✗ Em branco!{RESET} Gabarito: {GREEN}{BOLD}{item['chassis_clean']}{RESET}")
+            scores.append(0)
+            continue
+
+        pct, diff_str, matched, total_kw = _evaluate_structure_attempt(ans, item)
+        times.append(elapsed)
+        scores.append(pct)
+
+        speed_badge = f"{GREEN}⚡ {elapsed}s (Rápido!){RESET}" if elapsed <= 15 else f"{YELLOW}⏱️ {elapsed}s{RESET}"
+        if pct >= 85:
+            print(f"   {GREEN}{BOLD}✓ MANDOU BEM ({pct}%)!{RESET} Tempo: {speed_badge}")
+            print(f"   🔍 {diff_str}")
+        else:
+            print(f"   {YELLOW}⚠️ Quase ({pct}%)!{RESET} Tempo: {speed_badge}")
+            print(f"   🔍 {diff_str}")
+            print(f"   📐 {BOLD}Chassi Exato:{RESET} {GREEN}{BOLD}{item['chassis_clean']}{RESET}")
+            try:
+                _ = input(f"   ✍️  {CYAN}Digite o chassi exato 1x para destravar:{RESET} ")
+            except (KeyboardInterrupt, EOFError):
+                return
+
+    if scores:
+        avg_s = int(sum(scores) / len(scores))
+        avg_t = round(sum(times) / max(1, len(times)), 1) if times else 0
+        print("\n" + "═" * 74)
+        print(f"⚡ {BOLD}RESULTADO DO DRILL RELÂMPAGO:{RESET}")
+        print(f"   • Precisão Média dos Esqueletos: {GREEN if avg_s >= 85 else YELLOW}{BOLD}{avg_s}%{RESET}")
+        print(f"   • Velocidade Média de Reação:    {CYAN}{BOLD}{avg_t}s por frase{RESET} (Meta de prova: < 15s)")
+        print("═" * 74)
+        update_streak()
+
+    input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+
+
+def _run_chunk_unscramble_drill():
+    header()
+    print(f"\n{BOLD}{GREEN}[TREINO 3: 🔀 LEGO DE ESTRUTURAS C1 (ORDENAR BLOCOS + MEMÓRIA MOTORA)]{RESET}")
+    print(f"{DIM}Monte a ordem lógica dos blocos de cada estrutura C1 e depois digite a frase inteira.{RESET}\n")
+
+    for idx, item in enumerate(C1_STRUCTURE_DECK, 1):
+        chunks = list(item["chunks"])
+        indexed_chunks = list(enumerate(chunks, 1))
+        shuffled = list(indexed_chunks)
+        while shuffled == indexed_chunks and len(shuffled) > 1:
+            random.shuffle(shuffled)
+
+        correct_seq = [str(i + 1) for i in range(len(shuffled))]
+        # Map from displayed number (1..N) to original order
+        correct_disp_order = []
+        for orig_idx in range(1, len(chunks) + 1):
+            for disp_idx, (o_idx, _) in enumerate(shuffled, 1):
+                if o_idx == orig_idx:
+                    correct_disp_order.append(str(disp_idx))
+                    break
+
+        print("─" * 74)
+        print(f"{BOLD}{MAGENTA}🧩 LEGO {idx}/{len(C1_STRUCTURE_DECK)}: [{item['code']}] — {item['title']}{RESET}")
+        print(f"   💡 {DIM}{item['trigger_pt']}{RESET}\n")
+
+        for disp_idx, (_, chunk_text) in enumerate(shuffled, 1):
+            print(f"    {BOLD}{CYAN}[{disp_idx}]{RESET} {chunk_text}")
+
+        expected_str = " ".join(correct_disp_order)
+        expected_compact = "".join(correct_disp_order)
+
+        try:
+            user_order = input(f"\n   🔢 {BOLD}Digite a ordem correta dos números (ex: 2 1 4 3) [ou ENTER p/ sair]:{RESET} ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+        if not user_order:
+            break
+
+        user_digits = re.findall(r"\d+", user_order)
+        if "".join(user_digits) == expected_compact:
+            print(f"   {GREEN}{BOLD}✓ Ordem 100% exata!{RESET}")
+        else:
+            print(f"   {YELLOW}✗ A ordem correta era:{RESET} {BOLD}{expected_str}{RESET}")
+
+        print(f"   📐 {BOLD}Estrutura Montada:{RESET} {GREEN}{BOLD}{item['chassis_display']}{RESET}")
+        try:
+            _ = input(f"   ⌨️  {CYAN}Agora digite o chassi limpo ({item['chassis_clean']}) para gravar nos dedos:{RESET}\n      > ")
+        except (KeyboardInterrupt, EOFError):
+            return
+        print()
+
+    update_streak()
+    input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+
+
+def _show_acronym_cheatsheet_and_anki():
+    header()
+    print(f"\n{BOLD}{GREEN}[MAPA MENTAL DE PROVA: ACRÔNIMOS 'A-P-F-U' (REDAÇÃO) & 'T-I-T' (FOTO)]{RESET}")
+    print(f"{DIM}Na prova real, decore apenas as letras-gatilho abaixo. Quando o cronômetro abrir,{RESET}")
+    print(f"{DIM}digite as 4 linhas do esqueleto primeiro (leva 15s) e depois só preencha o recheio!{RESET}\n")
+
+    print(f"{BOLD}{MAGENTA}┌── 🏗️  FÓRMULA 'A-P-F-U' — INTERACTIVE WRITING (5 MINUTOS) ───────────────┐{RESET}")
+    for item in C1_STRUCTURE_DECK:
+        if item["group"] == "essay":
+            print(f"  {GREEN}{BOLD}[{item['acronym']}]{RESET} {BOLD}{item['title'].split('—')[1].strip()}:{RESET}")
+            print(f"      📐 {CYAN}{item['chassis_display']}{RESET}")
+            print(f"      💬 {DIM}Ex: {item['example']}{RESET}\n")
+    print(f"{BOLD}{MAGENTA}└── 💡 Follow-up (3 min): \"Building upon my previous point, it is worth noting that..., therefore...\" ┘{RESET}\n")
+
+    print(f"{BOLD}{CYAN}┌── 📸 FÓRMULA 'T-I-T' — WRITE ABOUT THE PHOTO (1 MINUTO) ─────────────────┐{RESET}")
+    for item in C1_STRUCTURE_DECK:
+        if item["group"] == "photo":
+            print(f"  {GREEN}{BOLD}[{item['acronym']}]{RESET} {BOLD}{item['title'].split('—')[1].strip()}:{RESET}")
+            print(f"      📐 {CYAN}{item['chassis_display']}{RESET}")
+            print(f"      💬 {DIM}Ex: {item['example']}{RESET}\n")
+    print(f"{BOLD}{CYAN}└──────────────────────────────────────────────────────────────────────────┘{RESET}\n")
+
+    try:
+        act = input(f"{YELLOW}Deseja [A] Enviar os 7 Flashcards de Estruturas com Áudio para o Anki, [O] Ouvir todas em voz alta, ou [ENTER] Voltar? {RESET}").strip().lower()
+    except (KeyboardInterrupt, EOFError):
+        return
+
+    if act == "a":
+        for item in C1_STRUCTURE_DECK:
+            front = (
+                f"<b>[DET Estrutura C1 — Gatilho {item['code']}]</b><br><br>"
+                f"🎯 <b>Missão:</b> {item['trigger_pt']}<br>"
+                f"🔑 <b>Letra-Gatilho:</b> Começa com <b>\"{item['acronym']}...\"</b><br><br>"
+                f"<i>Qual é o esqueleto (chassi) C1 completo em inglês?</i>"
+            )
+            back = (
+                f"<h3>📐 Chassi Oficial:</h3>"
+                f"<p style='font-size:1.15em;color:#10b981;'><b>{item['chassis_display']}</b></p>"
+                f"<hr><b>Exemplo Real C1:</b><br><i>{item['example']}</i>"
+            )
+            push_to_anki(
+                subdeck_name="Writing Upgrades",
+                front_html=front,
+                back_html=back,
+                tags=["DET", "DET_Structures_C1"],
+                audio_text=item["example"]
+            )
+        print(f"\n{GREEN}{BOLD}✓ Todos os 7 Flashcards de Estruturas C1 (+ áudio) foram enviados para o seu Anki (Subdeck: Writing Upgrades)!{RESET}")
+        input(f"\n{DIM}Pressione [ENTER] para continuar...{RESET}")
+    elif act == "o":
+        for item in C1_STRUCTURE_DECK:
+            print(f"\n🔊 {BOLD}[{item['code']}]{RESET} {GREEN}{item['chassis_clean']}{RESET}")
+            print(f"   {DIM}Ex: {item['example']}{RESET}")
+            speak_text(item["example"])
+        input(f"\n{DIM}Pressione [ENTER] para continuar...{RESET}")
+
+
+def _run_structure_memory_gym():
+    while True:
+        header()
+        print(f"\n{BOLD}{MAGENTA}[🏋️  ACADEMIA DE MEMORIZAÇÃO DE ESTRUTURAS C1 (A-P-F-U & T-I-T)]{RESET}")
+        print(f"{DIM}Treine até digitar os esqueletos da Redação e da Foto no piloto automático e sem olhar a cola!{RESET}\n")
+
+        print(f"  {BOLD}1){RESET} 🧩 {BOLD}Lacunas Progressivas (3 Níveis){RESET}    {DIM}(Iniciais ➔ Lacunas Cegas ➔ 100% De Cabeça + Diff Colorido){RESET}")
+        print(f"  {BOLD}2){RESET} ⚡ {BOLD}Drill Relâmpago de Chassis (15s){RESET}   {DIM}(Treino de velocidade para despejar o esqueleto no início da prova){RESET}")
+        print(f"  {BOLD}3){RESET} 🔀 {BOLD}Lego de Estruturas C1{RESET}              {DIM}(Desembaralhar os blocos da frase + fixação motora){RESET}")
+        print(f"  {BOLD}4){RESET} 🧠 {BOLD}Cola Mental A-P-F-U & T-I-T + Anki{RESET} {DIM}(Ver mapa completo de acrônimos, ouvir áudio e mandar pro Anki){RESET}")
+        print(f"  {BOLD}0){RESET} Voltar ao Writing Coach")
+
+        try:
+            choice = input(f"\n{CYAN}Escolha o treino de memorização (0-4): {RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if choice == "1":
+            _run_progressive_cloze_drill()
+        elif choice == "2":
+            _run_lightning_chassis_drill()
+        elif choice == "3":
+            _run_chunk_unscramble_drill()
+        elif choice == "4":
+            _show_acronym_cheatsheet_and_anki()
+        elif choice == "0":
+            break
+
+
 def run_writing_coach():
     while True:
         header()
@@ -4185,11 +4962,12 @@ def run_writing_coach():
         print(f"  {BOLD}1){RESET} 🏗️  {BOLD}Construtor de Redação em 4 Frases{RESET}   {DIM}(Tese ➔ Explicação ➔ Exemplo ➔ Conclusão + Nota DET){RESET}")
         print(f"  {BOLD}2){RESET} 📸 {BOLD}Fórmula de 3 Frases para Fotos{RESET}       {DIM}(Visão Geral ➔ Primeiro/Segundo Plano ➔ Atmosfera + Nota DET){RESET}")
         print(f"  {BOLD}3){RESET} 🌉 {BOLD}Ponte de Ideias (Português/B1 ➔ C1){RESET} {DIM}(Escreva o que quer dizer em PT e veja sua nota + estrutura C1){RESET}")
-        print(f"  {BOLD}4){RESET} ⏱️  Ir para o Simulador Oficial Cronometrado (5 min Interactive Writing)")
+        print(f"  {BOLD}4){RESET} 🏋️  {MAGENTA}{BOLD}Memorizar Estruturas (A-P-F-U/T-I-T){RESET} {DIM}(Lacunas Progressivas + Drill Relâmpago 15s + Lego C1 + Anki){RESET}")
+        print(f"  {BOLD}5){RESET} ⏱️  Ir para o Simulador Oficial Cronometrado (5 min Interactive Writing)")
         print(f"  {BOLD}0){RESET} Voltar ao Menu Principal")
 
         try:
-            sub = input(f"\n{CYAN}Escolha o modo do Writing Coach (0-4): {RESET}").strip()
+            sub = input(f"\n{CYAN}Escolha o modo do Writing Coach (0-5): {RESET}").strip()
         except (KeyboardInterrupt, EOFError):
             break
 
@@ -4200,7 +4978,480 @@ def run_writing_coach():
         elif sub == "3":
             _run_pt_to_c1_bridge_coach()
         elif sub == "4":
+            _run_structure_memory_gym()
+        elif sub == "5":
             run_writing_prompt()
+        elif sub == "0":
+            break
+
+
+# ==============================================================================
+# 11C. SPEAKING COACH & FLUENCY GYM (SCAFFOLDED SPEAKING + PHOTO + SHADOWING + VOICE BRIDGE)
+# ==============================================================================
+def _run_scaffolded_speaking_coach():
+    """Breaks a 90-second speaking prompt into 3 low-pressure 25-35s guided audio blocks (allows PT words if stuck)."""
+    header()
+    print(f"\n{BOLD}{MAGENTA}[SPEAKING COACH: CONSTRUTOR DE FALA EM 3 BLOCOS (PASSO A PASSO SEM PRESSÃO)]{RESET}")
+    print(f"{DIM}Destrave a fala dividindo a resposta de 90s em 3 micro-gravações guiadas com o esqueleto na tela.{RESET}")
+    print(f"{DIM}💡 Dica de Ouro: Se esquecer uma palavra em inglês no meio da frase, FALE EM PORTUGUÊS mesmo e continue o ritmo!{RESET}\n")
+
+    prompt = get_unseen_speaking_prompt()
+    if not prompt and get_gemini_key():
+        print(f"{CYAN}🤖 Gerando tema de fala inédito...{RESET}")
+        prompt = generate_dynamic_speaking_prompt_ai(4)
+    if not prompt:
+        prompt = get_random_speaking_prompt_pool()
+    mark_item_seen("speaking", prompt)
+
+    mission = get_c1_lexical_mission(3)
+    print(f"{BOLD}TEMA DE FALA:{RESET}")
+    print(f"{YELLOW}{prompt}{RESET}\n")
+    print_c1_mission_banner(mission)
+
+    try:
+        hear_opt = input(f"{CYAN}🔊 Deseja ouvir a pergunta falada antes de começar? [s/N]: {RESET}").strip().lower()
+    except (KeyboardInterrupt, EOFError):
+        return
+    if hear_opt in ["s", "sim", "y", "yes"]:
+        speak_text(prompt)
+
+    blocks = [
+        (
+            "BLOCO 1/3 — TESE + CONCESSÃO (25 segundos)",
+            "Although [benefício ou desafio do tema], I contend that [sua opinião principal] because [motivo central].",
+            "Ex: Although remote work can cause isolation, I contend that it boosts productivity because it eliminates commuting.",
+            25
+        ),
+        (
+            "BLOCO 2/3 — MECANISMO + EXEMPLO CONCRETO (35 segundos)",
+            "Primarily, this is because [como funciona], which significantly mitigates [problema]. For instance, in the field of [área], [exemplo].",
+            "Ex: Primarily, this is because flexible schedules reduce stress. For instance, in the field of software engineering, teams deliver faster.",
+            35
+        ),
+        (
+            "BLOCO 3/3 — CONCLUSÃO CONDICIONAL C1 (25 segundos)",
+            "Ultimately, provided that organizations enforce clear guidelines to mitigate potential risks, [conclusão final].",
+            "Ex: Ultimately, provided that organizations enforce clear communication guidelines, this approach will foster long-term success.",
+            25
+        )
+    ]
+
+    recorded_paths = []
+    for idx, (b_title, b_chassis, b_example, b_dur) in enumerate(blocks, 1):
+        print(f"\n{BOLD}{CYAN}── {b_title} ──{RESET}")
+        print(f"  📐 {BOLD}Esqueleto na tela (leia e preencha falando):{RESET}")
+        print(f"     {GREEN}{BOLD}{b_chassis}{RESET}")
+        print(f"  💬 {DIM}{b_example}{RESET}")
+        print(f"  {DIM}(Se travar numa palavra, fale em português e siga em frente sem parar!){RESET}")
+        while True:
+            try:
+                cmd = input(f"\n  🎙️  Pressione {GREEN}{BOLD}[ENTER]{RESET} para gravar o Bloco {idx} ({b_dur}s) ou 'o' para ouvir o exemplo: ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                return
+            if cmd == "o":
+                speak_text(b_example.replace("Ex: ", ""))
+                continue
+            break
+
+        b_path = os.path.join(tempfile.gettempdir(), f"det_speak_block_{idx}.wav")
+        print(f"\n  {GREEN}{BOLD}>>> FALE O BLOCO {idx} AGORA! (Ctrl+C quando terminar a frase) <<<{RESET}")
+        if record_mic_clip(b_path, b_dur, f"Bloco {idx}/3"):
+            recorded_paths.append(b_path)
+            print(f"  {GREEN}✓ Bloco {idx} capturado!{RESET}")
+        else:
+            print(f"  {YELLOW}⚠️ Áudio muito curto ou vazio no Bloco {idx}.{RESET}")
+
+    if not recorded_paths:
+        print(f"\n{YELLOW}Nenhum bloco de áudio foi gravado.{RESET}")
+        input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+        return
+
+    if get_gemini_key():
+        print(f"\n{CYAN}🤖 Analisando seus {len(recorded_paths)} blocos de voz no Gemini Multimodal (Transcrição + Tradução PT➔C1 + Pronúncia)...{RESET}")
+        sys_inst = (
+            "Você é um Coach Sênior de Fala e Pronúncia do Duolingo English Test (DET).\n"
+            "O aluno respondeu ao tema gravando 3 blocos guiados (Tese, Mecanismo/Exemplo e Conclusão), podendo ter falado palavras em português quando travou.\n"
+            "Avalie os áudios enviados e responda EXATAMENTE nestas seções:\n"
+            "0. 📊 DIAGNÓSTICO DE PONTUAÇÃO DA SUA FALA (Nota DET 10-160 para Fluência/Pronúncia e Léxico/Estrutura, mostrando o quanto ele ganha aplicando a versão C1):\n"
+            "1. 🔄 PONTE DE FALA BLOCO A BLOCO (Para cada bloco gravado:\n"
+            "   - 🎙️ O que você falou (transcrição exata, destacando entre colchetes qualquer palavra dita em português ou hesitação)\n"
+            "   - 🟢 Versão Falada Natural (B2 — fluida, corrigindo a gramática e traduzindo os termos em português)\n"
+            "   - 🚀 Versão Acadêmica Elevada (C1 — padrão 115+ DET))\n"
+            "2. 👄 RAIO-X DE PRONÚNCIA & PROSÓDIA (Liste as palavras que o aluno pronunciou com dificuldade ou sotaque forte que pode afetar a compreensão, mostrando a pronúncia figurada fácil para brasileiros e onde colocar a sílaba tônica):\n"
+            "3. 🏆 DISCURSO UNIFICADO PRONTO PARA FALAR EM 90s (Os 3 blocos unidos em uma fala natural de ~110 palavras):\n"
+            "4. 🎯 Coloque a frase mais importante corrigida sozinha em uma linha após o marcador EXATO 'SPEAK_MODEL: '.\n"
+            "5. Ao final absoluto, inclua obrigatoriamente: [DET_EVAL: CONVERSATION=<nota_de_10_a_160>, PRODUCTION=<nota_de_10_a_160>]"
+        )
+        ai_resp = analyze_multiple_audios_with_gemini(recorded_paths, prompt, sys_inst)
+        if ai_resp:
+            print(f"\n{BOLD}{MAGENTA}══════════════════════════════════════════════════════════════════════{RESET}")
+            print(f"{BOLD}{MAGENTA}🎓 COACHING DE FALA BLOCO A BLOCO (SUA VOZ ➔ B2 ➔ C1):{RESET}")
+            print(f"{BOLD}{MAGENTA}══════════════════════════════════════════════════════════════════════{RESET}\n")
+            print(ai_resp)
+            evaluate_c1_mission_and_cliches(ai_resp, mission)
+
+            conv_score, prod_score = extract_eval_scores(ai_resp, default_conv=80, default_prod=80)
+            record_skill_score("conversation", conv_score)
+            record_skill_score("production", prod_score)
+            print_speaking_coach_scorecard(conv_score, prod_score, mode_label="FALA EM 3 BLOCOS")
+
+            model_s = _extract_speak_model_sentence(ai_resp)
+            push_to_anki(
+                subdeck_name="Speaking Feedback",
+                front_html=f"<b>[DET Speaking Coach: 3-Block Builder]</b><br><br><b>Prompt:</b> {prompt}",
+                back_html=f"<h3>Upgrade Bloco a Bloco ({conv_score}/160):</h3><div style='text-align:left;'>{ai_resp.replace(chr(10), '<br>')}</div>",
+                tags=["DET", "DET_SpeakingCoach"],
+                audio_text=model_s or None
+            )
+            print(f"\n{YELLOW}📥 Card de fala + áudio nativo enviado ao Anki em segundo plano!{RESET}")
+            _offer_speaking_second_shot(prompt, ai_resp)
+
+    update_streak()
+    input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+
+
+def _run_scaffolded_photo_speaking_coach():
+    """Guided 3-Layer Photo Speaking Coach (T-I-T formula spoken step by step or all together without timer panic)."""
+    header()
+    print(f"\n{BOLD}{MAGENTA}[SPEAKING COACH: FALA GUIADA SOBRE FOTO (FÓRMULA T-I-T PASSO A PASSO)]{RESET}")
+    print(f"{DIM}Destrave o 'Speak About the Photo' descrevendo a imagem com a fórmula T-I-T na tela e feedback multimodal (Foto + Voz).{RESET}\n")
+
+    os.makedirs(PHOTOS_DIR, exist_ok=True)
+    unseen_live = get_unseen_live_photos()
+    chosen_file = random.choice(unseen_live) if unseen_live else fetch_dynamic_real_photo()
+
+    valid_exts = (".jpg", ".jpeg", ".png", ".webp")
+    photo_files = [f for f in os.listdir(PHOTOS_DIR) if f.lower().endswith(valid_exts)]
+    if not photo_files:
+        print(f"{RED}Nenhuma foto encontrada em {PHOTOS_DIR}.{RESET}")
+        input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+        return
+
+    if not chosen_file:
+        unseen_any = [f for f in photo_files if not is_item_seen("photo_speak_coach", f)]
+        chosen_file = random.choice(unseen_any) if unseen_any else random.choice(photo_files)
+    mark_item_seen("photo_speak_coach", chosen_file)
+
+    photo_path = os.path.join(PHOTOS_DIR, chosen_file)
+    photo_title = chosen_file.rsplit(".", 1)[0].replace("_", " ").title()
+    mission = get_c1_lexical_mission(3)
+
+    print_c1_mission_banner(mission)
+    print(f"{BOLD}📐 SEU ROTEIRO VISUAL T-I-T (Fale olhando para este esqueleto):{RESET}")
+    print(f"  1️⃣  {GREEN}{BOLD}[T] Visão Geral:{RESET}    \"This photograph captures a candid scene of [quem/o quê + -ing] in [lugar]...\"")
+    print(f"  2️⃣  {GREEN}{BOLD}[I] Planos:{RESET}         \"In the foreground, we can observe [frente], whereas the background reveals [fundo]...\"")
+    print(f"  3️⃣  {GREEN}{BOLD}[T] Atmosfera:{RESET}      \"The natural lighting conveys a sense of [foco/calma], suggesting that [hipótese]...\"")
+    print(f"  {DIM}💡 (Se não souber o nome de um objeto da foto em inglês, fale em PORTUGUÊS mesmo que a IA traduz pra você!){RESET}\n")
+
+    input(f"{GREEN}Pressione [ENTER] para abrir a foto na tela...{RESET}")
+
+    viewer_candidates = [
+        os.path.join(SCRIPT_DIR, "det_photo_viewer.py"),
+        os.path.join(SCRIPT_DIR, "det-photo-viewer"),
+        os.path.expanduser("~/.local/bin/det-photo-viewer")
+    ]
+    viewer_tool = next((p for p in viewer_candidates if os.path.exists(p)), None)
+    viewer_proc = None
+    if viewer_tool:
+        try:
+            viewer_proc = subprocess.Popen(
+                [sys.executable, viewer_tool, photo_path, "300", f"SPEAKING COACH: {photo_title}"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception:
+            pass
+
+    captured = False
+    audio_rec_path = os.path.join(tempfile.gettempdir(), "det_photo_speak_coach.wav")
+    try:
+        input(f"\n{CYAN}Observe a foto sem pressa. Quando estiver pronto, pressione [ENTER] para gravar suas 3 frases (60s)...{RESET}")
+        print(f"\n{GREEN}{BOLD}>>> FALE AS 3 FRASES (T-I-T) DESCREVENDO A FOTO! (Ctrl+C ao concluir) <<<{RESET}")
+        captured = record_mic_clip(audio_rec_path, 60, "Foto T-I-T Falada")
+    except (KeyboardInterrupt, EOFError):
+        return
+    finally:
+        if viewer_proc:
+            try:
+                viewer_proc.terminate()
+            except Exception:
+                pass
+
+    if captured and get_gemini_key():
+        print(f"\n{CYAN}🤖 Avaliando a FOTO REAL + SUA FALA no Gemini Multimodal...{RESET}")
+        sys_inst = (
+            "Você é um Coach Sênior do Duolingo English Test avaliando o treino guiado de 'Speak About the Photo' com a fórmula T-I-T.\n"
+            "Você recebeu a FOTO REAL e o ÁUDIO do aluno (que pode ter usado palavras em português se não sabia algum objeto).\n"
+            "Forneça:\n"
+            "0. 📊 DIAGNÓSTICO DE PONTUAÇÃO (Escala DET 10-160 para Precisão Visual, Pronúncia/Fluência e Vocabulário):\n"
+            "1. 🎙️ TRANSCRIÇÃO DO QUE VOCÊ FALOU + TRADUÇÃO DE TERMOS DA FOTO (Liste os objetos/ações da imagem que o aluno falou em português ou hesitou, dando o vocabulário exato em inglês B2/C1 com pronúncia figurada):\n"
+            "2. 🔄 UPGRADE NAS 3 CAMADAS T-I-T (Mostre como cada uma das 3 frases faladas fica em B2 natural e C1 avançado fiel à foto):\n"
+            "3. 👄 DICAS DE PRONÚNCIA (Palavras que precisam de atenção fonética):\n"
+            "4. 🎯 Coloque a melhor frase C1 descritiva da foto sozinha em uma linha após o marcador EXATO 'SPEAK_MODEL: '.\n"
+            "5. Ao final absoluto, inclua: [DET_EVAL: CONVERSATION=<nota_de_10_a_160>, PRODUCTION=<nota_de_10_a_160>]"
+        )
+        ai_resp = analyze_audio_with_gemini(
+            audio_rec_path,
+            f"Guided T-I-T Photo Speaking ({photo_title})",
+            image_path=photo_path,
+            custom_sys_inst=sys_inst
+        )
+        if ai_resp:
+            print(f"\n{BOLD}{MAGENTA}══════════════════════════════════════════════════════════════════════{RESET}")
+            print(ai_resp)
+            print(f"{BOLD}{MAGENTA}══════════════════════════════════════════════════════════════════════{RESET}\n")
+            evaluate_c1_mission_and_cliches(ai_resp, mission)
+
+            conv_score, prod_score = extract_eval_scores(ai_resp, default_conv=85, default_prod=85)
+            record_skill_score("conversation", conv_score)
+            record_skill_score("production", prod_score)
+            print_speaking_coach_scorecard(conv_score, prod_score, mode_label="FOTO T-I-T FALADA")
+
+            model_s = _extract_speak_model_sentence(ai_resp)
+            push_to_anki(
+                subdeck_name="Speaking Feedback",
+                front_html=f"<b>[DET Photo Speaking Coach: T-I-T]</b><br><br><b>Foto:</b> {photo_title}",
+                back_html=f"<h3>Coaching Multimodal ({conv_score}/160):</h3><div style='text-align:left;'>{ai_resp.replace(chr(10), '<br>')}</div>",
+                tags=["DET", "DET_PhotoSpeakingCoach"],
+                audio_text=model_s or None
+            )
+            _offer_speaking_second_shot(f"Photo T-I-T: {photo_title}", ai_resp, photo_path=photo_path)
+
+    update_streak()
+    input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+
+
+def _run_shadowing_pronunciation_lab():
+    """Interactive Shadowing, Prosody & Pronunciation Lab using C1 structures and academic sentences."""
+    while True:
+        header()
+        print(f"\n{BOLD}{MAGENTA}[🔁 LABORATÓRIO DE SHADOWING, PRONÚNCIA & RITMO (A-P-F-U / T-I-T / C1)]{RESET}")
+        print(f"{DIM}Destrave a musculatura da fala: ouça a voz nativa, repita em voz alta no microfone e receba diagnóstico fonético imediato.{RESET}\n")
+
+        print(f"  {BOLD}1){RESET} 📐 Treinar Pronúncia das 7 Estruturas-Chave (A-P-F-U da Redação/Fala & T-I-T da Foto)")
+        print(f"  {BOLD}2){RESET} 🎲 Frase Acadêmica B2/C1 Sortida do Exame (Ditado/Leitura em Voz Alta)")
+        print(f"  {BOLD}3){RESET} ✍️  Digitar ou Colar qualquer frase personalizada para treinar pronúncia")
+        print(f"  {BOLD}0){RESET} Voltar ao Speaking Coach")
+
+        try:
+            choice = input(f"\n{CYAN}Escolha o modo do Shadowing Lab (0-3): {RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if choice == "0":
+            break
+        elif choice == "1":
+            print(f"\n{BOLD}Escolha qual estrutura C1 deseja dominar na fala:{RESET}")
+            for i, item in enumerate(C1_STRUCTURE_DECK, 1):
+                print(f"  {BOLD}{i}){RESET} [{item['code']}] {GREEN}{item['example']}{RESET}")
+            try:
+                idx_s = input(f"\n{CYAN}Número da estrutura [1-{len(C1_STRUCTURE_DECK)}, ENTER=aleatória]: {RESET}").strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+            if idx_s.isdigit() and 1 <= int(idx_s) <= len(C1_STRUCTURE_DECK):
+                chosen_item = C1_STRUCTURE_DECK[int(idx_s) - 1]
+            else:
+                chosen_item = random.choice(C1_STRUCTURE_DECK)
+            target_sentence = chosen_item["example"]
+            target_label = f"{chosen_item['code']} — {chosen_item['title']}"
+        elif choice == "2":
+            lt_item = get_random_listen_type_from_pool()
+            target_sentence = lt_item["audio"] if isinstance(lt_item, dict) else str(lt_item)
+            target_label = "Frase Acadêmica Oficial DET (B2/C1)"
+        elif choice == "3":
+            try:
+                target_sentence = input(f"\n{CYAN}Digite a frase em inglês que deseja treinar falar:\n> {RESET}").strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+            if not target_sentence:
+                continue
+            target_label = "Frase Personalizada"
+        else:
+            continue
+
+        print(f"\n{BOLD}{CYAN}── {target_label} ──{RESET}")
+        print(f"🎯 {BOLD}FRASE-ALVO PARA LER EM VOZ ALTA:{RESET}")
+        print(f"   {GREEN}{BOLD}\"{target_sentence}\"{RESET}\n")
+
+        while True:
+            print(f"{CYAN}🔊 Tocando áudio nativo... Preste atenção nas conexões entre palavras (linking) e na entonação!{RESET}")
+            speak_text(target_sentence)
+            try:
+                act = input(f"\nDigite {BOLD}'o'{RESET} para ouvir de novo, {GREEN}{BOLD}[ENTER]{RESET} para gravar sua voz (15s), ou {BOLD}'v'{RESET} para voltar: ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                break
+            if act == "o":
+                continue
+            if act == "v":
+                break
+
+            print(f"\n{GREEN}{BOLD}>>> LEIA A FRASE EM VOZ ALTA COM CONFIANÇA! (15s — Ctrl+C ao terminar) <<<{RESET}")
+            print(f"   {YELLOW}\"{target_sentence}\"{RESET}\n")
+            sh_path = os.path.join(tempfile.gettempdir(), "det_shadow_lab.wav")
+            if record_mic_clip(sh_path, 15, "Shadowing Lab"):
+                if get_gemini_key():
+                    print(f"{CYAN}🤖 Analisando fonética, sílabas tônicas, ritmo (WPM) e clareza acústica...{RESET}")
+                    lab_sys = (
+                        "Você é um Especialista em Fonética Inglesa para Brasileiros e Examinador do DET.\n"
+                        "Compare o áudio gravado pelo aluno com a FRASE-ALVO exata.\n"
+                        "Responda de forma prática e encorajadora:\n"
+                        "1. 🎯 PRECISÃO FONÉTICA GERAL (0% a 100%) & VELOCIDADE/RITMO (Natural, Pausado demais, ou Apressado):\n"
+                        "2. 🎙️ O QUE FOI OUVIDO vs. ALVO (Destaque se alguma palavra soou como outra):\n"
+                        "3. 👄 CORREÇÃO FONÉTICA PALAVRA POR PALAVRA (Para cada palavra que teve desvio de pronúncia, mostre:\n"
+                        "   - Palavra | Como você pronunciou | Como pronunciar certo [transcrição figurada intuitiva p/ brasileiros, ex: 'mitigates -> MÍ-ti-gueits'])\n"
+                        "4. 🔗 DICA DE LINKING SOUNDS (Mostre onde juntar o som final de uma palavra com a vogal da seguinte nesta frase para soar fluido como nativo):\n"
+                        "Ao final, inclua: [DET_EVAL: CONVERSATION=<nota_de_10_a_160>, PRODUCTION=<nota_de_10_a_160>]"
+                    )
+                    fb = analyze_audio_with_gemini(sh_path, f"Target Sentence for Shadowing: {target_sentence}", custom_sys_inst=lab_sys)
+                    if fb:
+                        print(f"\n{BOLD}{GREEN}══════════════════════════════════════════════════════════════════════{RESET}")
+                        print(fb)
+                        print(f"{BOLD}{GREEN}══════════════════════════════════════════════════════════════════════{RESET}")
+                        c_sc, p_sc = extract_eval_scores(fb, default_conv=90, default_prod=90)
+                        record_skill_score("conversation", c_sc)
+                        print_speaking_coach_scorecard(c_sc, p_sc, mode_label="SHADOWING & PRONÚNCIA")
+
+            try:
+                retry = input(f"\n{CYAN}Deseja tentar falar a MESMA frase novamente para bater 100%? [s/N]: {RESET}").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                break
+            if retry not in ["s", "sim", "y", "yes"]:
+                break
+
+
+def _run_spoken_pt_to_c1_bridge():
+    """Voice-to-Voice Idea Bridge: Student speaks an idea in Portuguese/B1 into the mic -> hears & repeats B2/C1 English."""
+    header()
+    print(f"\n{BOLD}{MAGENTA}[🌉 PONTE DE FALA INSTANTÂNEA (FALE EM PORTUGUÊS/B1 ➔ DESTRAVE EM INGLÊS B2/C1)]{RESET}")
+    print(f"{DIM}Travou e não sabe como falar um pensamento em inglês?{RESET}")
+    print(f"{DIM}Fale no microfone em PORTUGUÊS (ou inglês misturado), ouça como um candidato C1 falaria e repita em voz alta!{RESET}\n")
+
+    if not get_gemini_key():
+        print(f"{YELLOW}⚠️ Configure sua chave do Gemini na opção S) Configurações para usar a Ponte de Fala IA.{RESET}")
+        input(f"\n{DIM}Pressione [ENTER] para voltar...{RESET}")
+        return
+
+    while True:
+        try:
+            cmd = input(f"{CYAN}🎙️  Pressione {GREEN}{BOLD}[ENTER]{RESET}{CYAN} para falar sua ideia no microfone (20s) ou digite {BOLD}'q'{RESET}{CYAN} para sair: {RESET}").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            break
+        if cmd in ["q", "0", "sair"]:
+            break
+
+        print(f"\n{GREEN}{BOLD}>>> FALE SUA IDEIA AGORA (em Português, Inglês ou misturado)! (Ctrl+C ao terminar) <<<{RESET}")
+        bridge_audio = os.path.join(tempfile.gettempdir(), "det_voice_bridge_in.wav")
+        if not record_mic_clip(bridge_audio, 20, "Capturando sua ideia"):
+            print(f"{YELLOW}Áudio não detectado. Tente novamente.{RESET}\n")
+            continue
+
+        print(f"{CYAN}🤖 Ouvindo sua ideia e construindo a versão falada B2 e C1...{RESET}")
+        bridge_sys = (
+            "Você é um Coach Oficial de Fala do Duolingo English Test (DET).\n"
+            "O aluno gravou um áudio dizendo uma ideia (em português, inglês básico ou misturado) que ele quer aprender a falar na prova.\n"
+            "Responda com clareza:\n"
+            "1. 🎙️ IDEIA CAPTURADA: Transcreva o que o aluno disse.\n"
+            "2. 🟢 COMO FALAR NO NÍVEL B2 (Natural, direto e fácil de lembrar sob pressão + guia de pronúncia figurada das palavras-chave):\n"
+            "3. 🚀 COMO FALAR NO NÍVEL C1 (Padrão 120+ DET, com conectivos e collocations elegantes + guia de pronúncia figurada):\n"
+            "4. 🧩 3 CHUNKS / BLOCOS DE FALA (Destaque 3 expressões prontas dessa frase para ele reutilizar em outros temas):\n"
+            "5. Coloque a frase recomendada para ele repetir em voz alta sozinha em uma linha após o marcador EXATO 'SPEAK_MODEL: '."
+        )
+        resp = analyze_audio_with_gemini(bridge_audio, "Voice Idea Bridge (PT/B1 to Spoken English B2/C1)", custom_sys_inst=bridge_sys)
+        if resp:
+            print(f"\n{GREEN}{BOLD}──────────────────────────────────────────────────────────────────────{RESET}")
+            print(resp)
+            print(f"{GREEN}{BOLD}──────────────────────────────────────────────────────────────────────{RESET}\n")
+
+            model_s = _extract_speak_model_sentence(resp)
+            if model_s:
+                push_to_anki(
+                    subdeck_name="Speaking Feedback",
+                    front_html=f"<b>[DET Voice Bridge: Como falar em Inglês B2/C1?]</b><br><br><i>Transforme esta ideia em fala fluente:</i>",
+                    back_html=f"<div style='text-align:left;'>{resp.replace(chr(10), '<br>')}</div>",
+                    tags=["DET", "DET_VoiceBridge"],
+                    audio_text=model_s
+                )
+                print(f"{YELLOW}📥 Card com áudio nativo enviado automaticamente para o seu Anki!{RESET}")
+                print(f"\n{CYAN}🔊 Ouça como pronunciar a frase recomendada:{RESET}")
+                print(f"   🎯 {GREEN}{BOLD}\"{model_s}\"{RESET}")
+                speak_text(model_s)
+
+                try:
+                    rep = input(f"\n🎙️  Pressione {GREEN}{BOLD}[ENTER]{RESET} para REPETIR essa frase em voz alta (15s) e fixar na memória muscular (ou 'p' p/ pular): ").strip().lower()
+                except (KeyboardInterrupt, EOFError):
+                    break
+                if rep != "p":
+                    print(f"\n{GREEN}{BOLD}>>> REPITA EM INGLÊS AGORA! (Ctrl+C ao terminar) <<<{RESET}")
+                    print(f"   🎯 {GREEN}\"{model_s}\"{RESET}\n")
+                    rep_path = os.path.join(tempfile.gettempdir(), "det_voice_bridge_rep.wav")
+                    if record_mic_clip(rep_path, 15, "Repetindo em Inglês"):
+                        check_sys = (
+                            "Avalie em no máximo 5 linhas a repetição do aluno para a frase-alvo.\n"
+                            "Dê a nota de Precisão Fonética (0-100%), elogie os acertos e aponte qualquer palavra que precise de ajuste na pronúncia.\n"
+                            "Ao final inclua: [DET_EVAL: CONVERSATION=<nota_de_10_a_160>, PRODUCTION=<nota_de_10_a_160>]"
+                        )
+                        rep_fb = analyze_audio_with_gemini(rep_path, f"Target Sentence: {model_s}", custom_sys_inst=check_sys)
+                        if rep_fb:
+                            print(f"\n{GREEN}✓ Feedback da sua pronúncia:{RESET}\n{rep_fb}\n")
+                            c_sc, p_sc = extract_eval_scores(rep_fb, default_conv=95, default_prod=95)
+                            record_skill_score("conversation", c_sc)
+                            record_skill_score("production", p_sc)
+                            print_speaking_coach_scorecard(c_sc, p_sc, mode_label="PONTE DE FALA (PT ➔ C1)")
+
+
+def run_speaking_coach():
+    """Main hub for Module K: Speaking Coach & Fluency Gym."""
+    while True:
+        header()
+        stats = load_stats()
+        speak_hist = stats.get("speaking_coach_scores", [])
+        skills = stats.get("skills", {})
+        conv_scores = skills.get("conversation", {}).get("scores", [])
+        prod_scores = skills.get("production", {}).get("scores", [])
+
+        print(f"\n{BOLD}{MAGENTA}[MÓDULO K: SPEAKING COACH & FLUENCY GYM (DESTRAVAR A FALA PASSO A PASSO)]{RESET}")
+        print(f"{DIM}Perca o medo do microfone: construa a fala em blocos curtos, destrave a pronúncia e domine fotos faladas.{RESET}")
+
+        if speak_hist:
+            last_entry = speak_hist[-1]
+            avg_sp = int(sum(x.get("overall", 80) for x in speak_hist[-5:]) / len(speak_hist[-5:]))
+            recent_trail = " ➔ ".join(str(x.get("overall", 80)) for x in speak_hist[-5:])
+            c_col = GREEN if avg_sp >= 95 else (YELLOW if avg_sp >= 80 else RED)
+            print(f"{CYAN}📊 {BOLD}Seu Desempenho no Speaking Coach:{RESET} Última Nota: {BOLD}{last_entry.get('overall')}/160{RESET} ({last_entry.get('mode')}) | Média Recente: {c_col}{BOLD}{avg_sp}/160 pts{RESET}")
+            print(f"{DIM}   Histórico recente: {recent_trail} pts (Meta UFRJ: 95-105 pts){RESET}\n")
+        elif conv_scores or prod_scores:
+            c_avg = int(sum(conv_scores[-3:]) / len(conv_scores[-3:])) if conv_scores else 75
+            p_avg = int(sum(prod_scores[-3:]) / len(prod_scores[-3:])) if prod_scores else 85
+            s_est = int((c_avg + p_avg) / 2)
+            print(f"{CYAN}📊 {BOLD}Nível Atual de Fala (Dashboard):{RESET} ~{BOLD}{s_est}/160 pts{RESET} (Conversation: {c_avg} | Production: {p_avg}) — {DIM}Faça um treino abaixo para subir Conversation!{RESET}\n")
+        else:
+            print()
+
+        print(f"  {BOLD}1){RESET} 🎙️  {BOLD}Construtor de Fala em 3 Blocos (25-35s){RESET} {DIM}(Tese ➔ Exemplo ➔ Conclusão; pode falar PT se travar!){RESET}")
+        print(f"  {BOLD}2){RESET} 📸 {BOLD}Fala Guiada sobre Foto (Fórmula T-I-T){RESET}  {DIM}(Foto na tela + esqueleto de 3 frases + Visão/Voz IA){RESET}")
+        print(f"  {BOLD}3){RESET} 🔁 {BOLD}Shadowing & Laboratório de Pronúncia{RESET}    {DIM}(Ouça voz nativa, repita no mic e corrija fonética/ritmo){RESET}")
+        print(f"  {BOLD}4){RESET} 🌉 {BOLD}Ponte de Fala (Fale em PT ➔ Repita C1){RESET}  {DIM}(Diga sua ideia em português no mic, ouça e repita em inglês){RESET}")
+        print(f"  {BOLD}5){RESET} ⏱️  {BOLD}Speak About the Photo Oficial (90s){RESET}     {DIM}(Simulador oficial DET: 20s preparo + 90s falando da foto){RESET}")
+        print(f"  {BOLD}6){RESET} ⏱️  {BOLD}Speaking Simulator Oficial (90s){RESET}        {DIM}(Read, Then Speak & Listen, Then Speak cego + Second Shot){RESET}")
+        print(f"  {BOLD}0){RESET} Voltar ao Menu Principal")
+
+        try:
+            sub = input(f"\n{CYAN}Escolha o treino do Speaking Coach (0-6): {RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if sub == "1":
+            _run_scaffolded_speaking_coach()
+        elif sub == "2":
+            _run_scaffolded_photo_speaking_coach()
+        elif sub == "3":
+            _run_shadowing_pronunciation_lab()
+        elif sub == "4":
+            _run_spoken_pt_to_c1_bridge()
+        elif sub == "5":
+            run_speak_about_photo_official()
+        elif sub == "6":
+            run_speaking_drill()
         elif sub == "0":
             break
 
@@ -4282,25 +5533,182 @@ def run_score_dashboard():
     input(f"\n{DIM}Pressione [ENTER] para voltar ao menu...{RESET}")
 
 # ==============================================================================
-# 10. SETTINGS & AI CONFIG
+# 10. SETTINGS, AI CONFIG & MULTI-MACHINE GIT UPDATER
 # ==============================================================================
+REPO_PATH_CONFIG_FILE = os.path.join(DATA_DIR, "repo_path.txt")
+GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/silasms/det-drill/main"
+
+
+def find_local_git_repo():
+    """Finds the local det-drill git repository across Linux, macOS, and Windows."""
+    candidates = []
+    if os.path.exists(REPO_PATH_CONFIG_FILE):
+        try:
+            with open(REPO_PATH_CONFIG_FILE, "r", encoding="utf-8") as f:
+                saved_p = f.read().strip()
+                if saved_p:
+                    candidates.append(saved_p)
+        except Exception:
+            pass
+
+    candidates.extend([
+        SCRIPT_DIR,
+        os.path.expanduser("~/Documents/det-drill-pro"),
+        os.path.expanduser("~/Documents/det-drill"),
+        os.path.expanduser("~/det-drill-pro"),
+        os.path.expanduser("~/det-drill"),
+        os.path.expanduser("~/Desktop/det-drill-pro"),
+        os.path.expanduser("~/Desktop/det-drill"),
+        os.path.expanduser("~/projects/det-drill-pro"),
+        os.path.expanduser("~/projects/det-drill"),
+    ])
+
+    for cand in candidates:
+        if cand and os.path.isdir(os.path.join(cand, ".git")) and os.path.exists(os.path.join(cand, "det_drill.py")):
+            try:
+                os.makedirs(DATA_DIR, exist_ok=True)
+                with open(REPO_PATH_CONFIG_FILE, "w", encoding="utf-8") as f:
+                    f.write(cand)
+            except Exception:
+                pass
+            return cand
+    return None
+
+
+def _get_git_version_badge():
+    repo_dir = find_local_git_repo()
+    if not repo_dir:
+        return f"{DIM}Standalone{RESET}"
+    try:
+        res = subprocess.run(
+            ["git", "-C", repo_dir, "log", "-1", "--format=%h (%cr)"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=2
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            return f"{GREEN}{res.stdout.strip()}{RESET} {DIM}[{repo_dir}]{RESET}"
+    except Exception:
+        pass
+    return f"{CYAN}{repo_dir}{RESET}"
+
+
+def _install_binaries_from_dir(source_dir):
+    """Copies det_drill.py and det_photo_viewer.py from source_dir into ~/.local/bin (or Windows wrapper)."""
+    import stat
+    src_drill = os.path.join(source_dir, "det_drill.py")
+    src_viewer = os.path.join(source_dir, "det_photo_viewer.py")
+    bin_dir = os.path.join(os.path.expanduser("~"), ".local", "bin")
+    os.makedirs(bin_dir, exist_ok=True)
+
+    if IS_WINDOWS:
+        if os.path.exists(src_drill):
+            shutil.copy2(src_drill, os.path.join(bin_dir, "det_drill.py"))
+        if os.path.exists(src_viewer):
+            shutil.copy2(src_viewer, os.path.join(bin_dir, "det_photo_viewer.py"))
+    else:
+        dst_drill = os.path.join(bin_dir, "det-drill")
+        dst_viewer = os.path.join(bin_dir, "det-photo-viewer")
+        if os.path.exists(src_drill):
+            shutil.copy2(src_drill, dst_drill)
+            st = os.stat(dst_drill)
+            os.chmod(dst_drill, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        if os.path.exists(src_viewer):
+            shutil.copy2(src_viewer, dst_viewer)
+            st = os.stat(dst_viewer)
+            os.chmod(dst_viewer, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def run_self_update(auto_restart=True):
+    """Pulls the latest code from GitHub (git@github.com:silasms/det-drill.git), updates ~/.local/bin, and restarts."""
+    print(f"\n{BOLD}{CYAN}🔄 [ATUALIZADOR MULTI-MÁQUINAS — DET DRILL PRO]{RESET}")
+    repo_dir = find_local_git_repo()
+
+    if repo_dir:
+        print(f"📂 Repositório Git encontrado em: {BOLD}{repo_dir}{RESET}")
+        print(f"{CYAN}⏳ Buscando atualizações do GitHub (git pull --rebase --autostash)...{RESET}")
+        try:
+            pull_res = subprocess.run(
+                ["git", "-C", repo_dir, "pull", "--rebase", "--autostash"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=30
+            )
+            print(f"{DIM}{(pull_res.stdout or '').strip()}{RESET}")
+            if pull_res.returncode != 0:
+                print(f"{YELLOW}⚠️ O git pull retornou código {pull_res.returncode}. Verifique sua conexão/SSH.{RESET}")
+                return False
+        except Exception as e:
+            print(f"{RED}✗ Erro ao executar git pull: {e}{RESET}")
+            return False
+
+        _install_binaries_from_dir(repo_dir)
+        # Also run sync_seed_data if install.py exists
+        try:
+            res_ver = subprocess.run(
+                ["git", "-C", repo_dir, "log", "-1", "--format=%h - %s (%cr)"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=3
+            )
+            ver_info = res_ver.stdout.strip() if res_ver.returncode == 0 else "Atualizado"
+        except Exception:
+            ver_info = "Atualizado"
+
+        print(f"\n{GREEN}{BOLD}✓ DET Drill Pro atualizado e instalado com sucesso em ~/.local/bin/det-drill!{RESET}")
+        print(f"📌 {BOLD}Versão ativa:{RESET} {CYAN}{ver_info}{RESET}")
+    else:
+        print(f"{YELLOW}⚠️ Pasta do repositório Git local não encontrada automaticamente.{RESET}")
+        print(f"{CYAN}⏳ Tentando atualização direta via GitHub HTTPS ({GITHUB_RAW_BASE_URL})...{RESET}")
+        try:
+            tmp_dir = tempfile.mkdtemp(prefix="det_update_")
+            for fname in ["det_drill.py", "det_photo_viewer.py"]:
+                url = f"{GITHUB_RAW_BASE_URL}/{fname}"
+                req = urllib.request.Request(url, headers={"User-Agent": "DET-Drill-Updater/1.0"})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    content = resp.read()
+                if len(content) > 1000:
+                    with open(os.path.join(tmp_dir, fname), "wb") as out_f:
+                        out_f.write(content)
+            _install_binaries_from_dir(tmp_dir)
+            print(f"\n{GREEN}{BOLD}✓ Executáveis atualizados diretamente do GitHub em ~/.local/bin/det-drill!{RESET}")
+        except Exception as e:
+            print(f"{RED}✗ Não foi possível baixar via HTTPS (o repositório pode ser privado via SSH): {e}{RESET}")
+            print(f"{YELLOW}💡 Dica: Em outra máquina, clone o repositório em ~/Documents/det-drill-pro e rode ./install-linux-mac.sh uma vez.{RESET}")
+            return False
+
+    if auto_restart:
+        try:
+            ans = input(f"\n{GREEN}Deseja recarregar o det-drill agora com a nova versão? [S/n]: {RESET}").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            ans = "n"
+        if ans not in ["n", "nao", "não", "no"]:
+            print(f"{CYAN}🚀 Reiniciando det-drill...{RESET}\n")
+            time.sleep(0.5)
+            target_bin = os.path.expanduser("~/.local/bin/det-drill")
+            if not IS_WINDOWS and os.path.exists(target_bin):
+                os.execv(sys.executable, [sys.executable, target_bin])
+            else:
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+    return True
+
+
 def run_settings():
     while True:
         header()
-        print(f"\n{BOLD}[PAINEL DE CONFIGURAÇÕES & CONEXÕES]{RESET}\n")
+        print(f"\n{BOLD}[PAINEL DE CONFIGURAÇÕES, CONEXÕES & ATUALIZAÇÃO]{RESET}\n")
         anki_status = f"{GREEN}ONLINE{RESET}" if is_anki_online() else f"{RED}OFFLINE{RESET}"
         gemini_k = get_gemini_key()
         gemini_disp = f"{GREEN}Ativa (...{gemini_k[-6:]}){RESET}" if gemini_k else f"{YELLOW}Não configurada{RESET}"
         pending_count = len(load_pending_cards())
+        git_badge = _get_git_version_badge()
 
         print(f"  1) Status AnkiConnect: {anki_status}")
         print(f"  2) Forçar Inicialização do Anki e Sincronizar ({pending_count} cards pendentes)")
         print(f"  3) Google Gemini AI Key: {gemini_disp}")
         print(f"  4) Testar Síntese de Voz (TTS Áudio)")
         print(f"  5) Testar Microfone (1s de gravação)")
-        print(f"  6) Voltar ao Menu Principal")
+        print(f"  6) 🔄 {GREEN}{BOLD}Atualizar DET Drill via Git (Multi-Máquinas){RESET} — Versão: {git_badge}")
+        print(f"  0) Voltar ao Menu Principal")
 
-        choice = input(f"\n{CYAN}Selecione uma opção (1-6): {RESET}").strip()
+        try:
+            choice = input(f"\n{CYAN}Selecione uma opção (0-6): {RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
 
         if choice == "1":
             print(f"\nTestando AnkiConnect em {ANKI_URL}...")
@@ -4338,7 +5746,10 @@ def run_settings():
             else:
                 print(f"{RED}✗ Falha ao capturar áudio do microfone.{RESET}")
             time.sleep(2)
-        elif choice == "6":
+        elif choice in ["6", "u", "U"]:
+            run_self_update(auto_restart=True)
+            input(f"\n{DIM}Pressione [ENTER] para continuar...{RESET}")
+        elif choice in ["0", "7"]:
             break
 
 # ==============================================================================
@@ -4377,6 +5788,10 @@ def trigger_background_prefetch():
 # MAIN ROUTINE
 # ==============================================================================
 def main():
+    if len(sys.argv) > 1 and sys.argv[1].lower() in ["--update", "-u", "update", "pull"]:
+        run_self_update(auto_restart=False)
+        return
+
     if is_anki_online():
         flush_pending_cards()
 
@@ -4391,12 +5806,13 @@ def main():
         print(f"  {BOLD}5){RESET} Interactive Writing {DIM}(5 min Etapa 1 + 3 min Follow-up Oficial + Missão C1){RESET}")
         print(f"  {BOLD}6){RESET} Interactive Reading {DIM}(Simulador Oficial de 4 Etapas do DET via IA){RESET}")
         print(f"  {BOLD}7){RESET} Vocab & Transitions {DIM}(Conectivos & Vocab B2/C1 em Lotes via IA){RESET}")
-        print(f"  {BOLD}8){RESET} Speaking Simulator  {DIM}(Read/Listen Then Speak Cego + Missão C1 + Voz IA){RESET}")
+        print(f"  {BOLD}8){RESET} Speaking Simulator  {DIM}(Read/Listen Then Speak + Speak About Photo 90s + Second Shot){RESET}")
         print(f"  {BOLD}9){RESET} Write About Photo   {DIM}(1 min - Visão Multimodal + Missão C1 + Fixação Ativa){RESET}")
         print(f"  {BOLD}L){RESET} {CYAN}{BOLD}Interactive Listen{RESET}  {DIM}(Diálogo Acadêmico + Summarize the Conversation 75s){RESET}")
-        print(f"  {BOLD}W){RESET} {GREEN}{BOLD}Writing Coach{RESET}       {DIM}(Destravar Escrita: 4 Frases Guiadas + Foto 3 Frases + PT➔C1){RESET}")
-        print(f"  {BOLD}D){RESET} {MAGENTA}{BOLD}Dashboard DET{RESET}       {DIM}(Projeção das 4 Subnotas UFRJ + IA Adaptativa){RESET}")
-        print(f"  {BOLD}S){RESET} Configurações       {DIM}(Anki + Google Gemini + Mic){RESET}")
+        print(f"  {BOLD}W){RESET} {GREEN}{BOLD}Writing Coach{RESET}       {DIM}(Destravar Escrita: 4 Frases + Foto 3 Frases + Estruturas C1){RESET}")
+        print(f"  {BOLD}K){RESET} {MAGENTA}{BOLD}Speaking Coach{RESET}      {DIM}(Destravar Fala: 3 Blocos + Foto T-I-T + Shadowing + Ponte PT➔C1){RESET}")
+        print(f"  {BOLD}D){RESET} {CYAN}{BOLD}Dashboard DET{RESET}       {DIM}(Projeção das 4 Subnotas UFRJ + IA Adaptativa){RESET}")
+        print(f"  {BOLD}S){RESET} Configurações       {DIM}(Anki + Google Gemini + Mic + 🔄 Atualizar via Git [U]){RESET}")
         print(f"  {BOLD}0){RESET} Sair")
 
         try:
@@ -4428,10 +5844,15 @@ def main():
             run_interactive_listening()
         elif choice.lower() == "w":
             run_writing_coach()
+        elif choice.lower() == "k":
+            run_speaking_coach()
         elif choice.lower() == "d":
             run_score_dashboard()
         elif choice.lower() == "s":
             run_settings()
+        elif choice.lower() == "u":
+            run_self_update(auto_restart=True)
+            input(f"\n{DIM}Pressione [ENTER] para continuar...{RESET}")
         elif choice == "0":
             wait_anki_queue()
             print(f"\n{GREEN}Treino encerrado. Mantenha a consistência rumo à aprovação na UFRJ!{RESET}\n")

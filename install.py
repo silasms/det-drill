@@ -37,6 +37,13 @@ def sync_seed_data():
     photos_dst = os.path.join(DATA_DIR, "photos")
     os.makedirs(photos_dst, exist_ok=True)
 
+    # Save the repository path so `det-drill --update` or menu S -> 6 works from anywhere
+    try:
+        with open(os.path.join(DATA_DIR, "repo_path.txt"), "w", encoding="utf-8") as f:
+            f.write(PROJECT_DIR)
+    except Exception:
+        pass
+
     if os.path.exists(SEED_DATA_DIR):
         for item in os.listdir(SEED_DATA_DIR):
             if item == "gemini_key.txt":

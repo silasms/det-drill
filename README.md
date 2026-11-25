@@ -15,9 +15,12 @@ Suíte completa e multiplataforma (**Linux**, **macOS Apple Silicon M1/M2/M3/M4*
    * **`5) Interactive Writing (5 min + 3 min Follow-up)`**: Etapa 1 (5 min) seguida da Etapa 2 oficial de *Interactive Follow-up* (3 min) gerada sobre o seu argumento.
    * **`6) Interactive Reading (4 Etapas Encadeadas)`**: *Complete the Sentences*, *Complete the Passage*, *Identify the Idea* e *Title the Passage* em uma única sessão.
    * **`7) Vocab & Transitions`**: Questões inéditas de conectivos e vocabulário acadêmico C1.
-   * **`8) Speaking Simulator (90s)`**: Suporte aos modos **Read, Then Speak** e **Listen, Then Speak** (pergunta cega apenas em áudio) com gravação real de microfone e avaliação multimodal da sua pronúncia e fluência.
+   * **`8) Speaking Simulator (90s)`**: Suporte aos modos **Read, Then Speak**, **Listen, Then Speak** (pergunta cega em áudio) e **Speak About the Photo (90s)** com gravação real de microfone, avaliação multimodal e ciclo **Second Shot** (ouvir frase modelo e regravar).
    * **`9) Write About the Photo (60s)`**: Download automático em background de **fotografias documentais reais e inéditas** avaliadas por **Visão Computacional Multimodal** (a IA enxerga a foto real + seu texto).
    * **`L) Interactive Listening + Summarize the Conversation (75s)`**: Diálogo acadêmico falado em 3 turnos + treino do resumo cronometrado de 75 segundos.
+   * **`W) Writing Coach & Structure Memory Gym`**: Construtor guiado de Redação (4 frases A-P-F-U), Fórmula de 3 Frases para Foto (T-I-T), Ponte de Ideias (PT/B1 ➔ C1) e Academia de Memorização de Estruturas (Lacunas Progressivas, Drill 15s e Lego C1).
+   * **`K) Speaking Coach & Fluency Gym (Destravar a Fala)`**: Construtor de Fala em 3 Blocos (25–35s, permitindo palavras em português se travar), Fala Guiada sobre Foto (T-I-T), Laboratório de Shadowing & Pronúncia e Ponte de Fala Instantânea (Voz PT ➔ Voz Inglês B2/C1).
+   * **`U) Atualizador Multi-Máquinas via Git`**: Atualize o `det-drill` em qualquer computador com 1 clique pelo menu **`S) Configurações ➔ 6) Atualizar via Git`** (ou atalho **`U`** no menu principal, ou `det-drill --update` no terminal).
 3. **Neurociência & Didática Adaptativa**:
    * **IA Adaptativa**: Recicla automaticamente palavras que você errou recentemente dentro dos novos textos e ditados gerados.
    * **Missão de Ativação C1 & Radar Anti-Clichê Local (`0ms`)**: Desafia você a ativar vocabulário C1 na escrita/fala e detecta clichês básicos A2 (*"very important"*, *"I think"*, *"good"*, *"thing"*, *"people"*), sugerindo upgrades C1 imediatos.
